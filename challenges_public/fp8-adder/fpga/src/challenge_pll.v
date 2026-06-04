@@ -24,11 +24,12 @@ module challenge_pll (
     output wire locked
 );
 
-    // 50 MHz × 16 / 4 = 200 MHz DUT clock (VCO = 800 MHz, within MAX10 spec 600-1200 MHz)
-    // Synthesized Fmax = 205.51 MHz (slow 1200mV 85°C) → 5.51 MHz margin at 200 MHz
-    // Speedup: 4096 × 6 / 200 MHz = 122.9 µs vs reference 2621 µs → 21.3×
-    localparam integer CLK0_MULTIPLY_BY = 16;
-    localparam integer CLK0_DIVIDE_BY   = 4;
+    // 50 MHz x 41 / 10 = 205 MHz DUT clock.
+    // 212.5 MHz failed slow 1200mV 85C setup by 0.161 ns; 205 MHz is the
+    // next conservative tuning point above the known-good 200 MHz build.
+    // Speedup: 4096 x 6 / 205 MHz = 119.9 us vs reference 2621 us -> 21.9x
+    localparam integer CLK0_MULTIPLY_BY = 41;
+    localparam integer CLK0_DIVIDE_BY   = 10;
 
     wire [5:0] pll_clk_bus;
     wire [1:0] inclk_bus;
