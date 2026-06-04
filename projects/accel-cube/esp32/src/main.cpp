@@ -61,14 +61,8 @@ void drawCube(float pitch, float roll) {
     display.clearDisplay();
     for (int e = 0; e < 12; e++) {
         int a = EDGES[e][0], b = EDGES[e][1];
-        // Clamp to display bounds before drawing
-        if (px[a] >= 0 && px[a] < 128 && py[a] >= 0 && py[a] < 64 &&
-            px[b] >= 0 && px[b] < 128 && py[b] >= 0 && py[b] < 64) {
-            display.drawLine(px[a], py[a], px[b], py[b], SSD1306_WHITE);
-        } else {
-            // Draw unclamped — Adafruit GFX clips to display bounds
-            display.drawLine(px[a], py[a], px[b], py[b], SSD1306_WHITE);
-        }
+        // Adafruit GFX clips lines to display bounds automatically
+        display.drawLine(px[a], py[a], px[b], py[b], SSD1306_WHITE);
     }
     display.display();
 }
