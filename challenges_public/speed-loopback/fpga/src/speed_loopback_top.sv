@@ -1,24 +1,25 @@
-// Speed Loopback Top Module — SPI Edition
-// FPGA generates N random bytes, sends to ESP32 via SPI.
-// ESP32 sums them and sends back checksum (LSB 8 bits).
-// FPGA compares and displays elapsed time in ms.
+// Speed Loopback Top Module — Dual-Channel SPI Edition
+// FPGA generates 10,000 random bytes across TWO parallel SPI channels,
+// 5,000 bytes per channel. Both channels operate simultaneously, cutting
+// wall-time roughly in half vs single-channel: ~1.75 ms vs ~3.5 ms.
 //
-// Protocol: FPGA sends 4-byte header (N, little-endian) then N random bytes
-//           over SPI (Mode 0, 8.33 MHz).
-//           After all bytes sent, CS_N deasserts (100 µs gap).
-//           FPGA then clocks 1 dummy byte and reads checksum on MISO.
+// Total speedup over 9600-baud UART baseline: ~6,000×.
 //
-// SPI pins (ARDUINO_IO):
-//   IO[2] = SCK  (output)
-//   IO[3] = MOSI (output)
-//   IO[4] = MISO (input)
-//   IO[5] = CS_N (output, active low)
+// Protocol (per channel):
+//   FPGA sends 4-byte header (per_channel LE = 5000) then 5000 LFSR bytes.
+//   After CS_N deasserts, 300 µs gap, then FPGA clocks 1 dummy byte and
+//   reads the channel's partial checksum on MISO.
+//   FPGA compares (cs0 + cs1)[7:0] == sum[7:0].
 //
-// Fixed count: 10,000 bytes  (~3000× speedup vs 9600-baud: 3.5 ms vs 10.4 sec)
-// SW[9]   debug mode: in DONE, show expected/received checksums instead of timer
+// Channel 0 (ESP32 HSPI, IOMUX pins):
+//   IO[2]=SCK, IO[3]=MOSI, IO[4]=MISO, IO[5]=CS_N
+// Channel 1 (ESP32 VSPI, IOMUX pins):
+//   IO[6]=SCK, IO[7]=MOSI, IO[8]=MISO, IO[9]=CS_N
+//
+// SW[9]   debug: in DONE show {cs0, cs1, expected} on HEX instead of timer
 // KEY[0]  start / restart
 // KEY[1]  reset (active low)
-// HEX5-0  show timer_ms (hex) in DONE, progress during send, count in IDLE
+// HEX5-0  timer_ms (or debug checksums)
 // LEDR[9] running, LEDR[0] pass, LEDR[1] fail
 
 module speed_loopback_top(
@@ -41,66 +42,104 @@ module speed_loopback_top(
     end
     wire start_pulse = key0_rr & ~key0_r;   // falling edge
 
-    // ---- Fixed data count: 10,000 bytes ----
+    // ---- Data counts ----
+    // 10,000 total bytes split evenly: 5,000 per channel
     wire [31:0] total_count = 32'd10_000;
+    wire [31:0] per_channel = 32'd5_000;
 
     // ---- LFSR-16 (x^16 + x^15 + x^13 + x^4 + 1) ----
-    reg [15:0] lfsr;
-    wire lfsr_feedback = lfsr[15] ^ lfsr[14] ^ lfsr[12] ^ lfsr[3];
+    reg  [15:0] lfsr;
+    wire        lfsr_fb     = lfsr[15] ^ lfsr[14] ^ lfsr[12] ^ lfsr[3];
+    // One-step lookahead for ch1
+    wire [15:0] lfsr_1      = {lfsr[14:0], lfsr_fb};
+    wire        lfsr_1_fb   = lfsr_1[15] ^ lfsr_1[14] ^ lfsr_1[12] ^ lfsr_1[3];
+    // Two-step lookahead: next state after both channels take a byte
+    wire [15:0] lfsr_2      = {lfsr_1[14:0], lfsr_1_fb};
 
     // ---- Checksum accumulator ----
     reg [31:0] sum;
 
-    // ---- SPI IO (replaces uart_tx + uart_rx) ----
-    reg        tx_start;
-    reg  [7:0] tx_data;
-    wire       tx_busy;
+    // =========================================================================
+    // Channel 0 — HSPI (ARDUINO_IO[2..5])
+    // =========================================================================
+    reg        tx0_start;
+    reg  [7:0] tx0_data;
+    wire       tx0_busy;
+    wire [7:0] rx0_data;
+    wire       rx0_valid;
+    wire       spi0_sck, spi0_mosi, spi0_cs_n;
 
-    wire [7:0] rx_data;
-    wire       rx_valid;
-
-    wire       spi_sck, spi_mosi, spi_cs_n;
-    wire       spi_miso;
-
-    // Double-flop synchronise MISO to avoid metastability
-    reg miso_r, miso_rr;
+    // 1-flop MISO sync (2-flop would be 1 SPI cycle late at CLK_DIV=1)
+    reg miso0_r;
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            miso_r  <= 1'b1;
-            miso_rr <= 1'b1;
-        end else begin
-            miso_r  <= ARDUINO_IO[4];
-            miso_rr <= miso_r;
-        end
+        if (!rst_n) miso0_r <= 1'b1;
+        else        miso0_r <= ARDUINO_IO[4];
     end
-    assign spi_miso = miso_r;    // 1-flop only: at CLK_DIV=1 (25 MHz SCK), miso_rr is 1 cycle late
 
     spi_loopback_io #(
         .CLK_FREQ  (50_000_000),
-        .CLK_DIV   (1),          // SCK = 50 MHz / (2×1) = 25 MHz (max safe for ESP32 HSPI IOMUX ~26 MHz)
-        .GAP_CYCLES(15000)       // 300 µs gap: ESP32 sums 10k bytes in ~150 µs + margin
-    ) u_spi (
+        .CLK_DIV   (1),          // SCK = 25 MHz
+        .GAP_CYCLES(15000)       // 300 µs gap for ESP32 to compute checksum
+    ) u_spi0 (
         .clk      (clk),
         .rst_n    (rst_n),
-        .tx_start (tx_start),
-        .tx_data  (tx_data),
-        .tx_busy  (tx_busy),
-        .rx_data  (rx_data),
-        .rx_valid (rx_valid),
-        .sck      (spi_sck),
-        .mosi     (spi_mosi),
-        .miso     (spi_miso),
-        .cs_n     (spi_cs_n)
+        .tx_start (tx0_start),
+        .tx_data  (tx0_data),
+        .tx_busy  (tx0_busy),
+        .rx_data  (rx0_data),
+        .rx_valid (rx0_valid),
+        .sck      (spi0_sck),
+        .mosi     (spi0_mosi),
+        .miso     (miso0_r),
+        .cs_n     (spi0_cs_n)
+    );
+
+    // =========================================================================
+    // Channel 1 — VSPI (ARDUINO_IO[6..9])
+    // =========================================================================
+    reg        tx1_start;
+    reg  [7:0] tx1_data;
+    wire       tx1_busy;
+    wire [7:0] rx1_data;
+    wire       rx1_valid;
+    wire       spi1_sck, spi1_mosi, spi1_cs_n;
+
+    reg miso1_r;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) miso1_r <= 1'b1;
+        else        miso1_r <= ARDUINO_IO[8];
+    end
+
+    spi_loopback_io #(
+        .CLK_FREQ  (50_000_000),
+        .CLK_DIV   (1),
+        .GAP_CYCLES(15000)
+    ) u_spi1 (
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .tx_start (tx1_start),
+        .tx_data  (tx1_data),
+        .tx_busy  (tx1_busy),
+        .rx_data  (rx1_data),
+        .rx_valid (rx1_valid),
+        .sck      (spi1_sck),
+        .mosi     (spi1_mosi),
+        .miso     (miso1_r),
+        .cs_n     (spi1_cs_n)
     );
 
     // ---- Arduino Header IO ----
-    assign ARDUINO_IO[0]    = 1'bz;         // unused (was UART RX)
-    assign ARDUINO_IO[1]    = 1'bz;         // unused (was UART TX)
-    assign ARDUINO_IO[2]    = spi_sck;      // SPI SCK
-    assign ARDUINO_IO[3]    = spi_mosi;     // SPI MOSI
-    assign ARDUINO_IO[4]    = 1'bz;         // SPI MISO (input)
-    assign ARDUINO_IO[5]    = spi_cs_n;     // SPI CS_N
-    assign ARDUINO_IO[15:6] = {10{1'bz}};  // unused
+    assign ARDUINO_IO[0]     = 1'bz;
+    assign ARDUINO_IO[1]     = 1'bz;
+    assign ARDUINO_IO[2]     = spi0_sck;    // ch0 SCK
+    assign ARDUINO_IO[3]     = spi0_mosi;   // ch0 MOSI
+    assign ARDUINO_IO[4]     = 1'bz;        // ch0 MISO (input)
+    assign ARDUINO_IO[5]     = spi0_cs_n;   // ch0 CS_N
+    assign ARDUINO_IO[6]     = spi1_sck;    // ch1 SCK
+    assign ARDUINO_IO[7]     = spi1_mosi;   // ch1 MOSI
+    assign ARDUINO_IO[8]     = 1'bz;        // ch1 MISO (input)
+    assign ARDUINO_IO[9]     = spi1_cs_n;   // ch1 CS_N
+    assign ARDUINO_IO[15:10] = {6{1'bz}};
 
     // ---- Millisecond timer ----
     reg [31:0] timer_ms;
@@ -131,10 +170,11 @@ module speed_loopback_top(
                S_DONE = 3'd4;
 
     reg [2:0]  state;
-    reg [31:0] send_count;
+    reg [31:0] send_count;         // total bytes sent (increments by 2 per step)
     reg [1:0]  hdr_idx;
     reg        pass;
-    reg [7:0]  rx_checksum;
+    reg [7:0]  rx0_checksum, rx1_checksum;
+    reg        got_rx0, got_rx1;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -144,12 +184,17 @@ module speed_loopback_top(
             send_count    <= 0;
             hdr_idx       <= 0;
             pass          <= 0;
-            rx_checksum   <= 0;
-            tx_start      <= 0;
+            rx0_checksum  <= 0;
+            rx1_checksum  <= 0;
+            got_rx0       <= 0;
+            got_rx1       <= 0;
+            tx0_start     <= 0;
+            tx1_start     <= 0;
             timer_running <= 0;
             timer_reset   <= 0;
         end else begin
-            tx_start    <= 0;       // default: one-cycle pulse
+            tx0_start   <= 0;       // default: one-cycle pulse
+            tx1_start   <= 0;
             timer_reset <= 0;
 
             // ---- Start / Restart ----
@@ -160,54 +205,72 @@ module speed_loopback_top(
                 send_count    <= 0;
                 hdr_idx       <= 0;
                 pass          <= 0;
+                got_rx0       <= 0;
+                got_rx1       <= 0;
                 timer_reset   <= 1;
                 timer_running <= 1;
             end else begin
                 case (state)
                     S_IDLE: ;   // wait for start_pulse
 
-                    // Send 4-byte header: total_count little-endian
+                    // Send 4-byte header (per_channel LE) to BOTH channels simultaneously.
+                    // Both spi_loopback_io instances step in lockstep because tx_start
+                    // is pulsed on the same clock cycle for both.
                     S_HDR: begin
-                        if (!tx_busy && !tx_start) begin
+                        if (!tx0_busy && !tx1_busy && !tx0_start && !tx1_start) begin
                             case (hdr_idx)
-                                2'd0: tx_data <= total_count[7:0];
-                                2'd1: tx_data <= total_count[15:8];
-                                2'd2: tx_data <= total_count[23:16];
-                                2'd3: tx_data <= total_count[31:24];
+                                2'd0: begin tx0_data <= per_channel[7:0];   tx1_data <= per_channel[7:0];   end
+                                2'd1: begin tx0_data <= per_channel[15:8];  tx1_data <= per_channel[15:8];  end
+                                2'd2: begin tx0_data <= per_channel[23:16]; tx1_data <= per_channel[23:16]; end
+                                2'd3: begin tx0_data <= per_channel[31:24]; tx1_data <= per_channel[31:24]; end
                             endcase
-                            tx_start <= 1;
-                            if (hdr_idx == 2'd3)
-                                state <= S_DATA;
+                            tx0_start <= 1;
+                            tx1_start <= 1;
+                            if (hdr_idx == 2'd3) state <= S_DATA;
                             hdr_idx <= hdr_idx + 1;
                         end
                     end
 
-                    // Send N random bytes
+                    // Send 5,000 LFSR bytes to each channel simultaneously.
+                    // Ch0 gets lfsr[7:0], ch1 gets lfsr_1[7:0] (next step).
+                    // LFSR advances 2 steps per iteration; send_count += 2.
                     S_DATA: begin
-                        if (!tx_busy && !tx_start) begin
+                        if (!tx0_busy && !tx1_busy && !tx0_start && !tx1_start) begin
                             if (send_count < total_count) begin
-                                tx_data    <= lfsr[7:0];
-                                tx_start   <= 1;
-                                sum        <= sum + {24'd0, lfsr[7:0]};
-                                lfsr       <= {lfsr[14:0], lfsr_feedback};
-                                send_count <= send_count + 1;
+                                tx0_data   <= lfsr[7:0];
+                                tx1_data   <= lfsr_1[7:0];
+                                tx0_start  <= 1;
+                                tx1_start  <= 1;
+                                sum        <= sum + {24'd0, lfsr[7:0]} + {24'd0, lfsr_1[7:0]};
+                                lfsr       <= lfsr_2;
+                                send_count <= send_count + 32'd2;
                             end else begin
                                 state <= S_WAIT;
                             end
                         end
                     end
 
-                    // Wait for SPI module to auto-complete checksum exchange
+                    // spi_loopback_io handles the CS_N deassert, gap, and checksum
+                    // read automatically. Wait for both rx_valid pulses.
                     S_WAIT: begin
-                        if (rx_valid) begin
-                            rx_checksum   <= rx_data;
+                        if (rx0_valid) begin
+                            rx0_checksum <= rx0_data;
+                            got_rx0      <= 1;
+                        end
+                        if (rx1_valid) begin
+                            rx1_checksum <= rx1_data;
+                            got_rx1      <= 1;
+                        end
+                        // Both checksums latched one cycle after their rx_valid pulses
+                        if (got_rx0 && got_rx1) begin
                             timer_running <= 0;
-                            pass          <= (rx_data == sum[7:0]);
+                            pass          <= ((rx0_checksum + rx1_checksum) == sum[7:0]);
                             state         <= S_DONE;
                         end
                     end
 
                     S_DONE: ;   // wait for start_pulse
+                    default: state <= S_IDLE;
                 endcase
             end
         end
@@ -221,7 +284,7 @@ module speed_loopback_top(
             S_HDR:   disp = 24'd0;
             S_DATA:  disp = send_count[23:0];
             S_WAIT:  disp = send_count[23:0];
-            S_DONE:  disp = SW[9] ? {8'd0, sum[7:0], rx_checksum}
+            S_DONE:  disp = SW[9] ? {rx1_checksum, rx0_checksum, sum[7:0]}
                                   : timer_ms[23:0];
             default: disp = 24'd0;
         endcase
