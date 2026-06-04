@@ -1,9 +1,9 @@
-// Speed Loopback — ESP32 SPI Slave (8.33 MHz)
+// Speed Loopback — ESP32 SPI Slave (25 MHz)
 // FPGA sends 4-byte header (N, LE) + N LFSR bytes over SPI.
 // ESP32 sums bytes 4..N+3 (skips header) and returns checksum (sum & 0xFF)
 // in a second SPI transaction triggered by the FPGA.
 //
-// Speedup vs 460800-baud UART: ~22× (9.7 ms vs 217 ms for 10 000 bytes)
+// Speedup vs 9600-baud baseline: ~3000× (~3.5 ms vs 10.4 sec for 10 000 bytes)
 //
 // SPI wiring (HSPI — native IOMUX for max speed):
 //   FPGA IO[2] SCK  → ESP32 GPIO14
@@ -98,7 +98,7 @@ static void spi_send(const uint8_t *buf, size_t len)
 void setup()
 {
     Serial.begin(115200);
-    Serial.println("\n--- Speed Loopback SPI Slave (8.33 MHz) ---");
+    Serial.println("\n--- Speed Loopback SPI Slave (25 MHz) ---");
 
     Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
     if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
@@ -109,7 +109,7 @@ void setup()
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
     display.println("Speed Loopback SPI");
-    display.println("8.33 MHz  ~22x UART");
+    display.println("25 MHz  ~3000x base");
     display.println("Waiting for FPGA...");
     display.display();
 

@@ -1,14 +1,14 @@
-Fitter Status : Successful - Thu Jun 04 13:55:01 2026
+Fitter Status : Successful - Thu Jun 04 15:11:59 2026
 Quartus Prime Version : 17.1.0 Build 590 10/25/2017 SJ Lite Edition
 Revision Name : fp8_adder
 Top-level Entity Name : fp8_top
 Family : MAX 10
 Device : 10M50DAF484C7G
 Timing Models : Final
-Total logic elements : 275 / 49,760 ( < 1 % )
+Total logic elements : 276 / 49,760 ( < 1 % )
     Total combinational functions : 263 / 49,760 ( < 1 % )
-    Dedicated logic registers : 98 / 49,760 ( < 1 % )
-Total registers : 98
+    Dedicated logic registers : 97 / 49,760 ( < 1 % )
+Total registers : 97
 Total pins : 65 / 360 ( 18 % )
 Total virtual pins : 0
 Total memory bits : 622,592 / 1,677,312 ( 37 % )

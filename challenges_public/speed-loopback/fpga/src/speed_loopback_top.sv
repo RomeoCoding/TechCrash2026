@@ -14,7 +14,7 @@
 //   IO[4] = MISO (input)
 //   IO[5] = CS_N (output, active low)
 //
-// Fixed count: 10,000 bytes
+// Fixed count: 10,000 bytes  (~3000× speedup vs 9600-baud: 3.5 ms vs 10.4 sec)
 // SW[9]   debug mode: in DONE, show expected/received checksums instead of timer
 // KEY[0]  start / restart
 // KEY[1]  reset (active low)
@@ -73,12 +73,12 @@ module speed_loopback_top(
             miso_rr <= miso_r;
         end
     end
-    assign spi_miso = miso_rr;
+    assign spi_miso = miso_r;    // 1-flop only: at CLK_DIV=1 (25 MHz SCK), miso_rr is 1 cycle late
 
     spi_loopback_io #(
         .CLK_FREQ  (50_000_000),
-        .CLK_DIV   (3),          // SCK = 50 MHz / (2×3) = 8.33 MHz
-        .GAP_CYCLES(50000)       // 1 ms gap: time for ESP32 to sum 10k bytes & call spi_send
+        .CLK_DIV   (1),          // SCK = 50 MHz / (2×1) = 25 MHz (max safe for ESP32 HSPI IOMUX ~26 MHz)
+        .GAP_CYCLES(15000)       // 300 µs gap: ESP32 sums 10k bytes in ~150 µs + margin
     ) u_spi (
         .clk      (clk),
         .rst_n    (rst_n),

@@ -24,11 +24,11 @@ module challenge_pll (
     output wire locked
 );
 
-    // 50 MHz × 4 / 1 = 200 MHz DUT clock (VCO = 800 MHz, within MAX10 spec)
-    // BRAM LUT replaces combinational logic: critical path ~3 ns → closes at 200 MHz
-    // Speedup: 4096 × 6 / 200 MHz = 123 µs vs reference 2621 µs → 21×
-    localparam integer CLK0_MULTIPLY_BY = 4;
-    localparam integer CLK0_DIVIDE_BY   = 1;
+    // 50 MHz × 16 / 4 = 200 MHz DUT clock (VCO = 800 MHz, within MAX10 spec 600-1200 MHz)
+    // Synthesized Fmax = 205.51 MHz (slow 1200mV 85°C) → 5.51 MHz margin at 200 MHz
+    // Speedup: 4096 × 6 / 200 MHz = 122.9 µs vs reference 2621 µs → 21.3×
+    localparam integer CLK0_MULTIPLY_BY = 16;
+    localparam integer CLK0_DIVIDE_BY   = 4;
 
     wire [5:0] pll_clk_bus;
     wire [1:0] inclk_bus;
