@@ -7,11 +7,15 @@ set_global_assignment -name LAST_QUARTUS_VERSION "17.1.0 Lite Edition"
 set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
+set_global_assignment -name INTERNAL_FLASH_UPDATE_MODE "SINGLE IMAGE WITH ERAM"
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_global_assignment -name SEED 3
 
 # Source files
 set_global_assignment -name VERILOG_FILE src/fp8_top.v
 set_global_assignment -name VERILOG_FILE src/challenge_pll.v
 set_global_assignment -name VERILOG_FILE src/fp8_adder.v
+set_global_assignment -name VERILOG_FILE src/fp8_lut.v
 set_global_assignment -name VERILOG_FILE src/test_controller.v
 set_global_assignment -name VERILOG_FILE src/seg7_hex.v
 set_global_assignment -name VERILOG_FILE src/rom_8x4096.v
