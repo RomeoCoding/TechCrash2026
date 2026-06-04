@@ -1,0 +1,12 @@
+	component adc_system is
+		port (
+			adc_address   : in  std_logic                     := 'X';             -- address
+			adc_read      : in  std_logic                     := 'X';             -- read
+			adc_write     : in  std_logic                     := 'X';             -- write
+			adc_writedata : in  std_logic_vector(31 downto 0) := (others => 'X'); -- writedata
+			adc_readdata  : out std_logic_vector(31 downto 0);                    -- readdata
+			clk_clk       : out std_logic;                                        -- clk
+			reset_reset_n : out std_logic                                         -- reset_n
+		);
+	end component adc_system;
+

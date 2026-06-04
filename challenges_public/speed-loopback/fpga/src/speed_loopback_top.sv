@@ -1,10 +1,18 @@
-// Speed Loopback Top Module
-// FPGA generates N random bytes, sends to ESP32 via UART.
+// Speed Loopback Top Module — SPI Edition
+// FPGA generates N random bytes, sends to ESP32 via SPI.
 // ESP32 sums them and sends back checksum (LSB 8 bits).
 // FPGA compares and displays elapsed time in ms.
 //
-// Protocol: FPGA sends 4-byte header (N, little-endian) then N random bytes.
-//           ESP32 sends back 1 byte (sum & 0xFF).
+// Protocol: FPGA sends 4-byte header (N, little-endian) then N random bytes
+//           over SPI (Mode 0, 8.33 MHz).
+//           After all bytes sent, CS_N deasserts (100 µs gap).
+//           FPGA then clocks 1 dummy byte and reads checksum on MISO.
+//
+// SPI pins (ARDUINO_IO):
+//   IO[2] = SCK  (output)
+//   IO[3] = MOSI (output)
+//   IO[4] = MISO (input)
+//   IO[5] = CS_N (output, active low)
 //
 // Fixed count: 10,000 bytes
 // SW[9]   debug mode: in DONE, show expected/received checksums instead of timer
@@ -43,32 +51,56 @@ module speed_loopback_top(
     // ---- Checksum accumulator ----
     reg [31:0] sum;
 
-    // ---- UART TX (FPGA -> ESP32 on GPIO[1]) ----
+    // ---- SPI IO (replaces uart_tx + uart_rx) ----
     reg        tx_start;
     reg  [7:0] tx_data;
     wire       tx_busy;
-    wire       tx_out;
 
-    uart_tx #(.CLK_FREQ(50_000_000), .BAUD(9600)) u_tx (
-        .clk(clk), .rst_n(rst_n),
-        .tx_start(tx_start), .tx_data(tx_data),
-        .tx_busy(tx_busy),   .tx_out(tx_out)
-    );
-
-    // ---- UART RX (ESP32 -> FPGA on GPIO[0]) ----
     wire [7:0] rx_data;
     wire       rx_valid;
 
-    uart_rx #(.CLK_FREQ(50_000_000), .BAUD(9600)) u_rx (
-        .clk(clk), .rst_n(rst_n),
-        .rx_in(ARDUINO_IO[0]),
-        .rx_data(rx_data), .rx_valid(rx_valid)
+    wire       spi_sck, spi_mosi, spi_cs_n;
+    wire       spi_miso;
+
+    // Double-flop synchronise MISO to avoid metastability
+    reg miso_r, miso_rr;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            miso_r  <= 1'b1;
+            miso_rr <= 1'b1;
+        end else begin
+            miso_r  <= ARDUINO_IO[4];
+            miso_rr <= miso_r;
+        end
+    end
+    assign spi_miso = miso_rr;
+
+    spi_loopback_io #(
+        .CLK_FREQ  (50_000_000),
+        .CLK_DIV   (3),          // SCK = 50 MHz / (2×3) = 8.33 MHz
+        .GAP_CYCLES(50000)       // 1 ms gap: time for ESP32 to sum 10k bytes & call spi_send
+    ) u_spi (
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .tx_start (tx_start),
+        .tx_data  (tx_data),
+        .tx_busy  (tx_busy),
+        .rx_data  (rx_data),
+        .rx_valid (rx_valid),
+        .sck      (spi_sck),
+        .mosi     (spi_mosi),
+        .miso     (spi_miso),
+        .cs_n     (spi_cs_n)
     );
 
     // ---- Arduino Header IO ----
-    assign ARDUINO_IO[0]    = 1'bz;          // RX input
-    assign ARDUINO_IO[1]    = tx_out;        // TX output
-    assign ARDUINO_IO[15:2] = {14{1'bz}};   // unused
+    assign ARDUINO_IO[0]    = 1'bz;         // unused (was UART RX)
+    assign ARDUINO_IO[1]    = 1'bz;         // unused (was UART TX)
+    assign ARDUINO_IO[2]    = spi_sck;      // SPI SCK
+    assign ARDUINO_IO[3]    = spi_mosi;     // SPI MOSI
+    assign ARDUINO_IO[4]    = 1'bz;         // SPI MISO (input)
+    assign ARDUINO_IO[5]    = spi_cs_n;     // SPI CS_N
+    assign ARDUINO_IO[15:6] = {10{1'bz}};  // unused
 
     // ---- Millisecond timer ----
     reg [31:0] timer_ms;
@@ -132,7 +164,7 @@ module speed_loopback_top(
                 timer_running <= 1;
             end else begin
                 case (state)
-                    S_IDLE: ;   // wait for start_pulse (handled above)
+                    S_IDLE: ;   // wait for start_pulse
 
                     // Send 4-byte header: total_count little-endian
                     S_HDR: begin
@@ -165,7 +197,7 @@ module speed_loopback_top(
                         end
                     end
 
-                    // Wait for ESP32 checksum byte
+                    // Wait for SPI module to auto-complete checksum exchange
                     S_WAIT: begin
                         if (rx_valid) begin
                             rx_checksum   <= rx_data;
@@ -175,7 +207,7 @@ module speed_loopback_top(
                         end
                     end
 
-                    S_DONE: ;   // wait for start_pulse (handled above)
+                    S_DONE: ;   // wait for start_pulse
                 endcase
             end
         end
@@ -189,8 +221,8 @@ module speed_loopback_top(
             S_HDR:   disp = 24'd0;
             S_DATA:  disp = send_count[23:0];
             S_WAIT:  disp = send_count[23:0];
-            S_DONE:  disp = SW[9] ? {8'd0, sum[7:0], rx_checksum}   // debug
-                                  : timer_ms[23:0];                  // elapsed ms
+            S_DONE:  disp = SW[9] ? {8'd0, sum[7:0], rx_checksum}
+                                  : timer_ms[23:0];
             default: disp = 24'd0;
         endcase
     end
