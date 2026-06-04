@@ -1,5 +1,5 @@
 # Secret competition challenges -- NEVER publish
-challenges/
+# challenges/   <-- temporarily unblocked to push challenge_5_fpga_voltmeter
 
 # Event Day challenges file -- remove this line to reveal on competition day
 eventday-challenges.html
