@@ -59,38 +59,51 @@ module pong_top (
     logic [8:0] uart_cnt;     // bit-period counter
     logic [3:0] uart_bit;     // 0-9 (8 data + 1 stop)
 
+    // Power-on reset — active-low for 1 clock cycle after bitstream load.
+    // Frees KEY[1] entirely for gameplay (shrink move).
+    logic por_n = 1'b0;
+    always_ff @(posedge MAX10_CLK1_50) por_n <= 1'b1;
+
     always_ff @(posedge MAX10_CLK1_50) begin
-        uart_done <= 1'b0;
-        if (!uart_active) begin
-            uart_tx_line <= 1'b1;                  // idle high
-            if (uart_start) begin
-                uart_active  <= 1'b1;
-                uart_tx_line <= 1'b0;              // start bit
-                uart_data    <= uart_tx_byte;
-                uart_bit     <= 4'd0;
-                uart_cnt     <= 9'd0;
-            end
+        if (!por_n) begin
+            uart_active  <= 1'b0;
+            uart_tx_line <= 1'b1;
+            uart_done    <= 1'b0;
+            uart_bit     <= 4'd0;
+            uart_cnt     <= 9'd0;
         end else begin
-            uart_cnt <= uart_cnt + 1'b1;
-            if (uart_cnt == CLKS_PER_BIT - 1) begin
-                uart_cnt <= 9'd0;
-                uart_bit <= uart_bit + 1'b1;
-                case (uart_bit)
-                    4'd0: uart_tx_line <= uart_data[0];
-                    4'd1: uart_tx_line <= uart_data[1];
-                    4'd2: uart_tx_line <= uart_data[2];
-                    4'd3: uart_tx_line <= uart_data[3];
-                    4'd4: uart_tx_line <= uart_data[4];
-                    4'd5: uart_tx_line <= uart_data[5];
-                    4'd6: uart_tx_line <= uart_data[6];
-                    4'd7: uart_tx_line <= uart_data[7];
-                    4'd8: uart_tx_line <= 1'b1;        // stop bit
-                    4'd9: begin
-                        uart_active <= 1'b0;
-                        uart_done   <= 1'b1;
-                    end
-                    default: ;
-                endcase
+            uart_done <= 1'b0;
+            if (!uart_active) begin
+                uart_tx_line <= 1'b1;                  // idle high
+                if (uart_start) begin
+                    uart_active  <= 1'b1;
+                    uart_tx_line <= 1'b0;              // start bit
+                    uart_data    <= uart_tx_byte;
+                    uart_bit     <= 4'd0;
+                    uart_cnt     <= 9'd0;
+                end
+            end else begin
+                uart_cnt <= uart_cnt + 1'b1;
+                if (uart_cnt == CLKS_PER_BIT - 1) begin
+                    uart_cnt <= 9'd0;
+                    uart_bit <= uart_bit + 1'b1;
+                    case (uart_bit)
+                        4'd0: uart_tx_line <= uart_data[0];
+                        4'd1: uart_tx_line <= uart_data[1];
+                        4'd2: uart_tx_line <= uart_data[2];
+                        4'd3: uart_tx_line <= uart_data[3];
+                        4'd4: uart_tx_line <= uart_data[4];
+                        4'd5: uart_tx_line <= uart_data[5];
+                        4'd6: uart_tx_line <= uart_data[6];
+                        4'd7: uart_tx_line <= uart_data[7];
+                        4'd8: uart_tx_line <= 1'b1;        // stop bit
+                        4'd9: begin
+                            uart_active <= 1'b0;
+                            uart_done   <= 1'b1;
+                        end
+                        default: ;
+                    endcase
+                end
             end
         end
     end
@@ -111,33 +124,42 @@ module pong_top (
     logic [5:0] spi_clk_cnt;
 
     always_ff @(posedge MAX10_CLK1_50) begin
-        spi_done <= 1'b0;
-        if (!spi_active) begin
-            GSENSOR_SCLK <= 1'b1;      // idle high (CPOL=1)
+        if (!por_n) begin
+            spi_active   <= 1'b0;
+            spi_done     <= 1'b0;
+            GSENSOR_SCLK <= 1'b1;
             GSENSOR_SDI  <= 1'b1;
-            if (spi_start) begin
-                spi_active  <= 1'b1;
-                spi_bit_cnt <= 3'd0;
-                spi_clk_cnt <= 6'd0;
-                GSENSOR_SDI <= spi_tx[7];  // pre-drive MSB
-            end
+            spi_bit_cnt  <= 3'd0;
+            spi_clk_cnt  <= 6'd0;
         end else begin
-            spi_clk_cnt <= spi_clk_cnt + 1'b1;
-            if (spi_clk_cnt == CLK_DIV - 1) begin
-                // falling edge — ADXL345 latches MOSI
-                GSENSOR_SCLK <= 1'b0;
-            end else if (spi_clk_cnt == 2*CLK_DIV - 1) begin
-                // rising edge — master samples MISO
-                GSENSOR_SCLK <= 1'b1;
-                spi_clk_cnt  <= 6'd0;
-                spi_rx_shift <= {spi_rx_shift[6:0], GSENSOR_SDO};
-                if (spi_bit_cnt == 3'd7) begin
-                    spi_active <= 1'b0;
-                    spi_done   <= 1'b1;
-                    spi_rx     <= {spi_rx_shift[6:0], GSENSOR_SDO};
-                end else begin
-                    GSENSOR_SDI <= spi_tx[6 - spi_bit_cnt];  // next MOSI bit
-                    spi_bit_cnt <= spi_bit_cnt + 1'b1;
+            spi_done <= 1'b0;
+            if (!spi_active) begin
+                GSENSOR_SCLK <= 1'b1;      // idle high (CPOL=1)
+                GSENSOR_SDI  <= 1'b1;
+                if (spi_start) begin
+                    spi_active  <= 1'b1;
+                    spi_bit_cnt <= 3'd0;
+                    spi_clk_cnt <= 6'd0;
+                    GSENSOR_SDI <= spi_tx[7];  // pre-drive MSB
+                end
+            end else begin
+                spi_clk_cnt <= spi_clk_cnt + 1'b1;
+                if (spi_clk_cnt == CLK_DIV - 1) begin
+                    // falling edge — ADXL345 latches MOSI
+                    GSENSOR_SCLK <= 1'b0;
+                end else if (spi_clk_cnt == 2*CLK_DIV - 1) begin
+                    // rising edge — master samples MISO
+                    GSENSOR_SCLK <= 1'b1;
+                    spi_clk_cnt  <= 6'd0;
+                    spi_rx_shift <= {spi_rx_shift[6:0], GSENSOR_SDO};
+                    if (spi_bit_cnt == 3'd7) begin
+                        spi_active <= 1'b0;
+                        spi_done   <= 1'b1;
+                        spi_rx     <= {spi_rx_shift[6:0], GSENSOR_SDO};
+                    end else begin
+                        GSENSOR_SDI <= spi_tx[6 - spi_bit_cnt];  // next MOSI bit
+                        spi_bit_cnt <= spi_bit_cnt + 1'b1;
+                    end
                 end
             end
         end
@@ -173,11 +195,18 @@ module pong_top (
     wire [7:0] key_byte = {6'b0, ~KEY[1], ~KEY[0]};
 
     always_ff @(posedge MAX10_CLK1_50) begin
-        // default: clear one-shot signals each cycle
-        spi_start  <= 1'b0;
-        uart_start <= 1'b0;
+        if (!por_n) begin
+            state        <= S_INIT_WAIT;
+            main_cnt     <= 27'd0;
+            spi_start    <= 1'b0;
+            uart_start   <= 1'b0;
+            GSENSOR_CS_N <= 1'b1;
+        end else begin
+            // default: clear one-shot signals each cycle
+            spi_start  <= 1'b0;
+            uart_start <= 1'b0;
 
-        case (state)
+            case (state)
 
             // ------------------------------------------------------------------
             // Power-up wait: 100 ms (5_000_000 cycles @ 50 MHz)
@@ -344,8 +373,9 @@ module pong_top (
                 state <= S_POLL_WAIT;     // 0x55 fully sent, wait for next poll
             end
 
-            default: state <= S_INIT_WAIT;
-        endcase
+                default: state <= S_INIT_WAIT;
+            endcase
+        end
     end
 
     // =========================================================================

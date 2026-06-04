@@ -58,12 +58,12 @@ module spi_loopback_io #(
     reg [7:0]  shift_reg;   // TX shift register
     reg [7:0]  rx_shift;    // RX shift register
     reg [2:0]  bit_cnt;     // Counts bits 7..0 (MSB first)
-    reg [2:0]  sck_cnt;     // Counts 0..CLK_DIV-1 for each SCK half
+    reg [7:0]  sck_cnt;     // Counts 0..CLK_DIV-1 for each SCK half (8 bits supports CLK_DIV up to 255)
     reg [16:0] gap_cnt;     // Counts GAP_CYCLES (needs 17 bits for up to 131071)
     reg [2:0]  idle_cnt;    // Counts cycles without tx_start in S_INTER
 
     // Precomputed half-period constant (synthesis-friendly)
-    localparam [2:0] SCK_HALF = CLK_DIV[2:0];
+    localparam SCK_HALF = CLK_DIV;
 
     // -------------------------------------------------------------------------
     // Main FSM
@@ -77,7 +77,7 @@ module spi_loopback_io #(
             tx_busy  <= 1'b0;
             rx_valid <= 1'b0;
             rx_data  <= 8'h00;
-            sck_cnt  <= 3'd0;
+            sck_cnt  <= 8'd0;
             gap_cnt  <= 17'd0;
             idle_cnt <= 3'd0;
             bit_cnt  <= 3'd7;
@@ -114,9 +114,9 @@ module spi_loopback_io #(
                 //   - SCK falls after another SCK_HALF: shift next bit
                 // ---------------------------------------------------------
                 S_TX_BYTE: begin
-                    sck_cnt <= sck_cnt + 3'd1;
-                    if (sck_cnt == SCK_HALF - 3'd1) begin
-                        sck_cnt <= 3'd0;
+                    sck_cnt <= sck_cnt + 8'd1;
+                    if (sck_cnt == SCK_HALF - 8'd1) begin
+                        sck_cnt <= 8'd0;
                         if (!sck) begin
                             // Rising edge: ESP32 samples MOSI here
                             sck <= 1'b1;
@@ -151,7 +151,7 @@ module spi_loopback_io #(
                         shift_reg <= tx_data;
                         mosi      <= tx_data[7];
                         bit_cnt   <= 3'd7;
-                        sck_cnt   <= 3'd0;
+                        sck_cnt   <= 8'd0;
                         tx_busy   <= 1'b1;
                         idle_cnt  <= 3'd0;
                         state     <= S_TX_BYTE;
@@ -182,7 +182,7 @@ module spi_loopback_io #(
                         cs_n    <= 1'b0;
                         mosi    <= 1'b0;
                         bit_cnt <= 3'd7;
-                        sck_cnt <= 3'd0;
+                        sck_cnt <= 8'd0;
                         rx_shift<= 8'h00;
                         state   <= S_RX_BYTE;
                     end else begin
@@ -195,9 +195,9 @@ module spi_loopback_io #(
                 //          each SCK rising edge (Mode 0).
                 // ---------------------------------------------------------
                 S_RX_BYTE: begin
-                    sck_cnt <= sck_cnt + 3'd1;
-                    if (sck_cnt == SCK_HALF - 3'd1) begin
-                        sck_cnt <= 3'd0;
+                    sck_cnt <= sck_cnt + 8'd1;
+                    if (sck_cnt == SCK_HALF - 8'd1) begin
+                        sck_cnt <= 8'd0;
                         if (!sck) begin
                             // Rising edge: sample MISO (ESP32 drives checksum)
                             sck      <= 1'b1;

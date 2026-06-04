@@ -1,18 +1,17 @@
 // ============================================================================
-// ESP32_P1 — Retro Pong bridge (Player 1 side)
+// ESP32_P1 — Retro Pong bridge (single-player)
 // ============================================================================
 // Receives 11-byte packets from FPGA over UART2 (GPIO16 RX).
 // Validates framing (0xAA start, 0x55 end), forwards unchanged to PC
 // via USB Serial.
 //
-// Also listens on USB Serial for 4-byte score packets from PC (0xCC p1 p2 0x55)
+// Listens on USB Serial for 4-byte score packets from PC (0xCC p1 cpu 0x55)
 // and updates the OLED display.
 //
 // OLED layout (128x64, SSD1306, I2C 0x3C):
-//   Line 0: "P1  PONG"
-//   Line 1: "Score:  X"
+//   Line 0: "RETRO PONG"
+//   Line 1: "P1: X  CPU: Y"
 //   Line 2: "Tilt: fwd/back"
-//   Line 3: "K0:Shot K1:Shrink"
 // ============================================================================
 
 #include <Arduino.h>
@@ -41,8 +40,8 @@
 HardwareSerial FpgaSerial(2);
 Adafruit_SSD1306 display(OLED_W, OLED_H, &Wire, -1);
 
-uint8_t p1_score = 0;
-uint8_t p2_score = 0;
+uint8_t p1_score  = 0;
+uint8_t cpu_score = 0;
 
 // ---- OLED helpers ----
 void drawOLED() {
@@ -51,19 +50,16 @@ void drawOLED() {
     display.setTextColor(SSD1306_WHITE);
 
     display.setCursor(0, 0);
-    display.print(F("P1  PONG"));
+    display.print(F("RETRO PONG"));
 
-    display.setCursor(0, 16);
-    display.print(F("Score: "));
+    display.setCursor(0, 20);
+    display.print(F("P1: "));
     display.print(p1_score);
-    display.print(F(" - "));
-    display.print(p2_score);
+    display.print(F("  CPU: "));
+    display.print(cpu_score);
 
-    display.setCursor(0, 32);
+    display.setCursor(0, 44);
     display.print(F("Tilt: fwd/back"));
-
-    display.setCursor(0, 48);
-    display.print(F("K0:Shot K1:Shrink"));
 
     display.display();
 }
@@ -82,8 +78,8 @@ void checkScorePacket() {
         uint8_t s2  = Serial.read();
         uint8_t end = Serial.read();
         if (end == PKT_END) {
-            p1_score = s1;
-            p2_score = s2;
+            p1_score  = s1;
+            cpu_score = s2;
             drawOLED();
         }
     }
