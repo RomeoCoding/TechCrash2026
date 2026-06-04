@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FP8 Adder Challenge - Hackathon VLSI-2026</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b1220;
+            --bg-2: #111b31;
+            --bg-card: rgba(15, 23, 42, 0.88);
+            --border: rgba(148, 163, 184, 0.18);
+            --text: #e5edf8;
+            --text-muted: #9fb0c7;
+            --accent: #6ee7f9;
+            --accent-2: #f59e0b;
+            --accent-green: #34d399;
+            --accent-red: #fb7185;
+            --accent-yellow: #fbbf24;
+            --editable-bg: rgba(52, 211, 153, 0.12);
+            --locked-bg: rgba(148, 163, 184, 0.1);
+            --radius: 16px;
+            --font: 'Inter', sans-serif;
+            --mono: 'JetBrains Mono', monospace;
+            --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font);
+            color: var(--text);
+            line-height: 1.6;
+            background:
+                radial-gradient(circle at top left, rgba(110, 231, 249, 0.14), transparent 28%),
+                radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 24%),
+                linear-gradient(180deg, var(--bg-2), var(--bg));
+            min-height: 100vh;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+        .back-link { display: inline-block; color: var(--accent); text-decoration: none; margin-bottom: 2rem; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+
+        h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+        h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2.5rem; margin-bottom: 1rem; color: var(--accent); }
+        h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+
+        .subtitle { color: var(--text-muted); font-size: 1.1rem; margin-bottom: 2rem; }
+
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .badge-performance { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); border: 1px solid rgba(251, 191, 36, 0.3); }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            background:
+                linear-gradient(135deg, rgba(17, 27, 49, 0.95), rgba(11, 18, 32, 0.92)),
+                linear-gradient(90deg, rgba(110, 231, 249, 0.1), rgba(245, 158, 11, 0.08));
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -80px -80px auto;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(110, 231, 249, 0.18), transparent 70%);
+            pointer-events: none;
+        }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow); backdrop-filter: blur(10px); }
+
+        .callout-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.9rem;
+            margin-top: 1.5rem;
+        }
+
+        .callout {
+            padding: 1rem;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.55);
+        }
+
+        .callout strong { display: block; color: var(--accent); font-size: 1.2rem; }
+
+        .poster-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.85rem;
+            margin: 1.25rem 0 0;
+        }
+
+        .poster-step {
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(11, 18, 32, 0.7));
+            padding: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .poster-step::before {
+            content: attr(data-step);
+            position: absolute;
+            top: 0.7rem;
+            right: 0.8rem;
+            color: rgba(159, 176, 199, 0.2);
+            font-weight: 800;
+            font-size: 1.5rem;
+        }
+
+        .poster-step strong {
+            display: block;
+            margin-bottom: 0.35rem;
+            color: var(--accent);
+        }
+
+        .tip-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        .tip-card {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+        }
+
+        .tip-card strong {
+            display: block;
+            margin-bottom: 0.45rem;
+            color: var(--accent-2);
+        }
+
+        .touch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .touch-box {
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            border: 1px solid var(--border);
+        }
+
+        .touch-box.editable { background: var(--editable-bg); }
+        .touch-box.locked { background: var(--locked-bg); }
+
+        .touch-box h3 { margin-top: 0; }
+
+        .touch-box ul { margin: 0.6rem 0 0; padding-left: 1.2rem; color: var(--text-muted); }
+
+        .rule-list { list-style: none; padding: 0; }
+        .rule-list li { padding: 0.5rem 0; padding-left: 1.5rem; position: relative; border-bottom: 1px solid var(--border); }
+        .rule-list li:last-child { border-bottom: none; }
+        .rule-list li::before { content: ""; position: absolute; left: 0; top: 0.85rem; width: 8px; height: 8px; border-radius: 50%; }
+        .rule-list li.rule-do::before { background: var(--accent-green); }
+        .rule-list li.rule-dont::before { background: var(--accent-red); }
+
+        .scoring-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .scoring-table th, .scoring-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .scoring-table th { color: var(--accent); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        code { font-family: var(--mono); background: rgba(96, 165, 250, 0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; }
+        pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; overflow-x: auto; margin: 1rem 0; }
+        pre code { background: none; padding: 0; font-size: 0.8rem; line-height: 1.7; }
+
+        .arch-diagram { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; margin: 1.5rem 0; text-align: center; font-family: var(--mono); font-size: 0.75rem; line-height: 1.4; white-space: pre; overflow-x: auto; }
+
+        .system-diagram-wrap {
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 1rem;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(11, 18, 32, 0.82));
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .system-diagram {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .diagram-caption {
+            margin-top: 0.9rem;
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+
+        .diagram-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(11, 18, 32, 0.65);
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        .legend-editable { background: #34d399; }
+        .legend-locked { background: #94a3b8; }
+        .legend-fixed { background: #f59e0b; }
+        .legend-sync { background: #6ee7f9; }
+
+        .file-tree { font-family: var(--mono); font-size: 0.8rem; line-height: 1.8; color: var(--text-muted); }
+        .file-tree .editable { color: var(--accent-green); font-weight: 600; }
+        .file-tree .readonly { color: var(--text-muted); }
+
+        .metric-box { display: inline-block; background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); border-radius: var(--radius); padding: 1rem 1.5rem; margin: 0.5rem 0.5rem 0.5rem 0; text-align: center; }
+        .metric-value { font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+        .metric-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .steps { counter-reset: steps; }
+        .steps li { counter-increment: steps; list-style: none; padding: 0.75rem 0 0.75rem 2.5rem; position: relative; border-left: 2px solid var(--border); margin-left: 0.75rem; }
+        .steps li::before { content: counter(steps); position: absolute; left: -0.85rem; top: 0.65rem; width: 1.5rem; height: 1.5rem; background: var(--accent); color: var(--bg); border-radius: 50%; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+        .display-diagram { font-family: var(--mono); font-size: 0.7rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin: 1rem 0; white-space: pre; overflow-x: auto; line-height: 1.5; }
+
+        .score-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.8rem;
+            margin-top: 1rem;
+        }
+
+        .score-pill {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.55);
+        }
+
+        .score-pill .big {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--accent-2);
+        }
+
+        footer { margin-top: 4rem; padding: 2rem 0; border-top: 1px solid var(--border); text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
+        @media (max-width: 640px) {
+            h1 { font-size: 2rem; }
+            .hero { padding: 1.5rem; }
+            .arch-diagram, .display-diagram { font-size: 0.65rem; padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <a href="../../index.html#challenges" class="back-link">&larr; Back to Hackathon VLSI-2026</a>
+
+    <div class="hero">
+        <span class="badge badge-performance">Performance Challenge</span>
+        <h1>FP8 Adder Race</h1>
+        <p class="subtitle">You get a correct but intentionally slow FP8 E4M3 adder. The board runs 4096 locked test vectors, lets you tune the DUT/test clock with a PLL, and measures the final runtime on a separate fixed 25 MHz stopwatch path. Your job is to make the result faster without breaking correctness.</p>
+
+        <div class="callout-grid">
+            <div class="callout">
+                <strong>4096</strong>
+                Golden test vectors on every run
+            </div>
+            <div class="callout">
+                <strong>25 MHz</strong>
+                Starter PLL default and fixed stopwatch reference
+            </div>
+            <div class="callout">
+                <strong>2 files</strong>
+                Editable targets: <code>fp8_adder.v</code> and <code>challenge_pll.v</code>
+            </div>
+            <div class="callout">
+                <strong>us</strong>
+                Final score shown as decimal microseconds
+            </div>
+        </div>
+
+        <div class="poster-strip">
+            <div class="poster-step" data-step="01">
+                <strong>Start Safe</strong>
+                Ship baseline is 25 MHz on the editable PLL.
+            </div>
+            <div class="poster-step" data-step="02">
+                <strong>Speed Two Knobs</strong>
+                Improve both micro-architecture and DUT clock.
+            </div>
+            <div class="poster-step" data-step="03">
+                <strong>Trust The Board</strong>
+                The stopwatch path is locked and is the judge.
+            </div>
+            <div class="poster-step" data-step="04">
+                <strong>Keep Green</strong>
+                A faster run only counts when <code>LEDR[0] = 1</code>.
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Overview ─── -->
+    <h2>Overview</h2>
+    <div class="card">
+        <p>You are given a <strong>working starter design</strong> for an FP8 E4M3 adder challenge. The reference DUT is intentionally slow and non-pipelined. The rest of the system is already built for you: ROMs with operand pairs, a controller that launches every test, a checker that compares against golden results, and a board UI that reports the final runtime.</p>
+        <p style="margin-top: 0.75rem;">The competition now has two knobs: your adder micro-architecture and the DUT/test clock generated by an editable PLL. The stopwatch is still locked. A separate <strong>fixed 25 MHz measurement clock</strong> measures real elapsed time in microseconds, so teams can push frequency without touching the timing reference.</p>
+        <div style="margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            <div class="metric-box">
+                <div class="metric-value">FP8 E4M3</div>
+                <div class="metric-label">Number Format</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">4096</div>
+                <div class="metric-label">Test Vectors</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">0 fails</div>
+                <div class="metric-label">Correctness Gate</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">Fastest us</div>
+                <div class="metric-label">Ranking Metric</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── FP8 E4M3 Format ─── -->
+    <h2>FP8 E4M3 Format</h2>
+    <div class="card">
+        <pre><code>Bit layout:  [7]  [6:3]   [2:0]
+             sign  exp     mantissa
+
+Bias = 7
+Normal:   (-1)^s  x  2^(exp-7)  x  1.mantissa
+Denormal: (-1)^s  x  2^(1-7)    x  0.mantissa   (exp = 0000)
+NaN:      exp = 1111, mantissa = 111  (0x7F or 0xFF)
+No infinity in E4M3 (exp=1111 with mantissa != 111 is a valid number)
+
+Max value:  +/- 448  (0x7E / 0xFE)
+Min normal: +/- 2^-6 = 0.015625
+Rounding:   Round-to-nearest-even (IEEE default)</code></pre>
+    </div>
+
+    <!-- ─── Rules ─── -->
+    <h2>Rules</h2>
+    <div class="card">
+        <ul class="rule-list">
+            <li class="rule-do">You may modify <code>fp8_adder.v</code> and <code>challenge_pll.v</code></li>
+            <li class="rule-do">You may add new modules (instantiated from fp8_adder.v)</li>
+            <li class="rule-do">You may change the architecture to pipelined, combinational, or any other valid implementation</li>
+            <li class="rule-do">You may tune the DUT/test clock frequency through the editable PLL</li>
+            <li class="rule-do">You must keep the same port interface (clk, rst_n, start, a, b, result, done, busy)</li>
+            <li class="rule-dont">Do NOT modify <code>fp8_top.v</code>, <code>test_controller.v</code>, <code>rom_8x4096.v</code>, or <code>seg7_hex.v</code></li>
+            <li class="rule-dont">Do NOT modify the fixed 25 MHz measurement clock path, board pins, or test vectors</li>
+            <li class="rule-dont">Do NOT modify the .hex test vector files</li>
+            <li class="rule-dont">Do NOT hardcode results or bypass computation</li>
+        </ul>
+
+        <div class="touch-grid">
+            <div class="touch-box editable">
+                <h3>What You Can Touch</h3>
+                <ul>
+                    <li>The logic inside <code>fp8_adder.v</code></li>
+                    <li>The PLL settings inside <code>challenge_pll.v</code></li>
+                    <li>New helper modules instantiated by the DUT</li>
+                    <li>Latency and micro-architecture choices</li>
+                    <li>Any implementation style that still honors the protocol</li>
+                </ul>
+            </div>
+            <div class="touch-box locked">
+                <h3>What Is Locked</h3>
+                <ul>
+                    <li>The fixed 25 MHz measurement clock and stopwatch path</li>
+                    <li>The 4096-vector ROM contents and golden checker</li>
+                    <li>Display logic, progress LEDs, and pass/fail reporting</li>
+                    <li>Pin assignments, top-level, and reference harness files</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Scoring ─── -->
+    <h2>Scoring</h2>
+    <div class="card">
+        <div class="score-strip">
+            <div class="score-pill">
+                <div class="big">80 pts</div>
+                At least 2x faster than the starter
+            </div>
+            <div class="score-pill">
+                <div class="big">+150</div>
+                Fastest correct team
+            </div>
+            <div class="score-pill">
+                <div class="big">+100</div>
+                Second place
+            </div>
+            <div class="score-pill">
+                <div class="big">+50</div>
+                Third place
+            </div>
+        </div>
+
+        <table class="scoring-table">
+            <thead>
+                <tr><th>Criterion</th><th>Method</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Correctness</strong></td>
+                    <td>All 4096 test vectors must pass on the board</td>
+                    <td><code>LEDR[0] = 1</code> after the run</td>
+                </tr>
+                <tr>
+                    <td><strong>Base award</strong></td>
+                    <td>Cut the displayed runtime to at least half of the starter runtime</td>
+                    <td>Earn 80 points</td>
+                </tr>
+                <tr>
+                    <td><strong>Podium</strong></td>
+                    <td>Rank teams by fastest correct board runtime</td>
+                    <td>+150 / +100 / +50</td>
+                </tr>
+            </tbody>
+        </table>
+        <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.92rem;">The board is the source of truth. If your design is fast in simulation but does not finish with <code>LEDR[0] = 1</code>, it does not count. You can now compete on both frequency and architecture, but the elapsed-time measurement itself stays fixed.</p>
+    </div>
+
+    <!-- ─── Architecture ─── -->
+    <h2>Architecture</h2>
+    <div class="system-diagram-wrap">
+        <svg class="system-diagram" viewBox="0 0 1000 620" role="img" aria-label="FP8 adder challenge system block diagram with editable performance path and fixed measurement path">
+            <defs>
+                <linearGradient id="perfLane" x1="0" x2="1">
+                    <stop offset="0%" stop-color="rgba(52,211,153,0.14)"/>
+                    <stop offset="100%" stop-color="rgba(52,211,153,0.04)"/>
+                </linearGradient>
+                <linearGradient id="measLane" x1="0" x2="1">
+                    <stop offset="0%" stop-color="rgba(245,158,11,0.16)"/>
+                    <stop offset="100%" stop-color="rgba(245,158,11,0.05)"/>
+                </linearGradient>
+                <marker id="arrowPerf" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#34d399"></path>
+                </marker>
+                <marker id="arrowMeas" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b"></path>
+                </marker>
+                <marker id="arrowSync" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#6ee7f9"></path>
+                </marker>
+            </defs>
+
+            <rect x="24" y="26" width="952" height="260" rx="24" fill="url(#perfLane)" stroke="rgba(52,211,153,0.35)"></rect>
+            <rect x="24" y="320" width="952" height="260" rx="24" fill="url(#measLane)" stroke="rgba(245,158,11,0.35)"></rect>
+
+            <text x="52" y="62" fill="#34d399" font-size="24" font-weight="700">Performance Path, Editable Clock Domain</text>
+            <text x="52" y="92" fill="#9fb0c7" font-size="15">Teams tune the PLL and redesign the FP8 adder here. This is the path that wins or loses the race.</text>
+
+            <text x="52" y="356" fill="#f59e0b" font-size="24" font-weight="700">Measurement Path, Fixed Reference Clock</text>
+            <text x="52" y="386" fill="#9fb0c7" font-size="15">The stopwatch stays locked at 25 MHz. It measures real elapsed time and is the same for every team.</text>
+
+            <rect x="82" y="146" width="160" height="82" rx="18" fill="rgba(148,163,184,0.12)" stroke="rgba(148,163,184,0.35)"></rect>
+            <text x="162" y="176" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">50 MHz Board Clock</text>
+            <text x="162" y="202" text-anchor="middle" fill="#9fb0c7" font-size="13">MAX10_CLK1_50</text>
+
+            <rect x="294" y="146" width="170" height="82" rx="18" fill="rgba(52,211,153,0.14)" stroke="rgba(52,211,153,0.42)"></rect>
+            <text x="379" y="176" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">challenge_pll.v</text>
+            <text x="379" y="202" text-anchor="middle" fill="#9fb0c7" font-size="13">Editable DUT/test clock</text>
+
+            <rect x="520" y="132" width="188" height="110" rx="18" fill="rgba(148,163,184,0.12)" stroke="rgba(148,163,184,0.35)"></rect>
+            <text x="614" y="164" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">ROMs + test_controller</text>
+            <text x="614" y="190" text-anchor="middle" fill="#9fb0c7" font-size="13">4096 vectors</text>
+            <text x="614" y="210" text-anchor="middle" fill="#9fb0c7" font-size="13">launch, wait, compare</text>
+
+            <rect x="760" y="146" width="156" height="82" rx="18" fill="rgba(52,211,153,0.14)" stroke="rgba(52,211,153,0.42)"></rect>
+            <text x="838" y="176" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">fp8_adder.v</text>
+            <text x="838" y="202" text-anchor="middle" fill="#9fb0c7" font-size="13">Editable architecture</text>
+
+            <path d="M242 187 L294 187" stroke="#34d399" stroke-width="4" fill="none" marker-end="url(#arrowPerf)"></path>
+            <path d="M464 187 L520 187" stroke="#34d399" stroke-width="4" fill="none" marker-end="url(#arrowPerf)"></path>
+            <path d="M708 187 L760 187" stroke="#34d399" stroke-width="4" fill="none" marker-end="url(#arrowPerf)"></path>
+
+            <text x="379" y="124" text-anchor="middle" fill="#34d399" font-size="12" font-weight="700">Starter default: 25 MHz</text>
+            <text x="740" y="120" fill="#6ee7f9" font-size="12" font-weight="700">Handshake: start / done / busy</text>
+
+            <rect x="82" y="440" width="160" height="82" rx="18" fill="rgba(148,163,184,0.12)" stroke="rgba(148,163,184,0.35)"></rect>
+            <text x="162" y="470" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">50 MHz Board Clock</text>
+            <text x="162" y="496" text-anchor="middle" fill="#9fb0c7" font-size="13">Same source, separate path</text>
+
+            <rect x="294" y="440" width="170" height="82" rx="18" fill="rgba(245,158,11,0.14)" stroke="rgba(245,158,11,0.42)"></rect>
+            <text x="379" y="470" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">Locked divide-by-2</text>
+            <text x="379" y="496" text-anchor="middle" fill="#9fb0c7" font-size="13">Fixed 25 MHz meas_clk</text>
+
+            <rect x="520" y="426" width="188" height="110" rx="18" fill="rgba(245,158,11,0.14)" stroke="rgba(245,158,11,0.42)"></rect>
+            <text x="614" y="458" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">Microsecond Counter</text>
+            <text x="614" y="484" text-anchor="middle" fill="#9fb0c7" font-size="13">Counts only while run is active</text>
+            <text x="614" y="504" text-anchor="middle" fill="#9fb0c7" font-size="13">Independent of DUT clock tuning</text>
+
+            <rect x="760" y="440" width="156" height="82" rx="18" fill="rgba(148,163,184,0.12)" stroke="rgba(148,163,184,0.35)"></rect>
+            <text x="838" y="470" text-anchor="middle" fill="#e5edf8" font-size="18" font-weight="700">HEX + LEDs</text>
+            <text x="838" y="496" text-anchor="middle" fill="#9fb0c7" font-size="13">HEX = us, LEDR[0] = pass</text>
+
+            <path d="M242 481 L294 481" stroke="#f59e0b" stroke-width="4" fill="none" marker-end="url(#arrowMeas)"></path>
+            <path d="M464 481 L520 481" stroke="#f59e0b" stroke-width="4" fill="none" marker-end="url(#arrowMeas)"></path>
+            <path d="M708 481 L760 481" stroke="#f59e0b" stroke-width="4" fill="none" marker-end="url(#arrowMeas)"></path>
+
+            <path d="M614 242 C614 296, 614 330, 614 426" stroke="#6ee7f9" stroke-width="3" fill="none" stroke-dasharray="8 7" marker-end="url(#arrowSync)"></path>
+            <text x="630" y="334" fill="#6ee7f9" font-size="12" font-weight="700">running / finished sync</text>
+        </svg>
+
+        <p class="diagram-caption">The board clock fans out into two lanes. Teams race on the editable PLL-driven performance lane, while the stopwatch lane stays fixed so the displayed microseconds remain comparable across teams.</p>
+
+        <div class="diagram-legend">
+            <span class="legend-item"><span class="legend-swatch legend-editable"></span>Editable by participants</span>
+            <span class="legend-item"><span class="legend-swatch legend-locked"></span>Locked challenge infrastructure</span>
+            <span class="legend-item"><span class="legend-swatch legend-fixed"></span>Fixed measurement-only clock path</span>
+            <span class="legend-item"><span class="legend-swatch legend-sync"></span>Clock-domain synchronization</span>
+        </div>
+    </div>
+
+    <h2>Safe PLL Tuning</h2>
+    <div class="card">
+        <p>The PLL is editable on purpose, but treat it like a controlled experiment. Push it in small steps, keep the stopwatch path untouched, and let Quartus plus the board tell you when you crossed the line.</p>
+
+        <pre><code>// challenge_pll.v
+localparam integer CLK0_MULTIPLY_BY = 1;
+localparam integer CLK0_DIVIDE_BY   = 2;
+
+// DUT/test clock = 50 MHz * CLK0_MULTIPLY_BY / CLK0_DIVIDE_BY</code></pre>
+
+        <div class="tip-grid">
+            <div class="tip-card">
+                <strong>Default Baseline</strong>
+                The starter ships at 25 MHz. That is your known-good point.
+            </div>
+            <div class="tip-card">
+                <strong>Move Gradually</strong>
+                Change PLL ratios in small steps and recompile every time.
+            </div>
+            <div class="tip-card">
+                <strong>Timing First</strong>
+                If TimeQuest no longer closes, the frequency bump is not usable.
+            </div>
+            <div class="tip-card">
+                <strong>Board Is Final</strong>
+                Even with clean timing, the run only counts if the board ends with <code>LEDR[0] = 1</code>.
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Interface ─── -->
+    <h2>Adder Interface</h2>
+    <div class="card">
+        <pre><code>module fp8_adder (
+    input  wire       clk,      // Editable DUT/test clock from challenge_pll.v
+    input  wire       rst_n,    // Active-low reset
+    input  wire       start,    // Pulse high 1 cycle to begin
+    input  wire [7:0] a,        // Operand A (stable while busy)
+    input  wire [7:0] b,        // Operand B (stable while busy)
+    output reg  [7:0] result,   // FP8 sum (valid when done=1)
+    output reg        done,     // Pulses high 1 cycle when complete
+    output reg        busy      // High while computing
+);</code></pre>
+        <h3>Protocol</h3>
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem; color: var(--text-muted);">
+            <li>Test controller asserts <code>start</code> for 1 clock with valid <code>a</code>, <code>b</code></li>
+                        <li>Adder raises <code>busy</code> while the operation is in flight</li>
+                        <li>Adder pulses <code>done</code> for 1 clock with valid <code>result</code></li>
+                        <li>The controller does not launch the next test until your adder finishes the current one</li>
+            <li>NaN comparison: any NaN output matches any NaN expected</li>
+        </ul>
+    </div>
+
+    <!-- ─── Display ─── -->
+    <h2>Board Display</h2>
+    <div class="display-diagram">
+While running:
+    HEX5 HEX4 = E E
+    LEDR[9:1] = progress bar
+    LEDR[0]   = 0
+
+When finished:
+    HEX5..HEX0 = total elapsed time in decimal microseconds
+    LEDR[0]    = 1 if all 4096 tests passed, 0 otherwise
+    LEDR[9:1]  = 0
+
+Controls:
+  KEY[0] = Start (active low, press to begin test)
+  KEY[1] = Reset (active low, press to reset)
+    SW[9:0] are unused by the locked harness</div>
+
+        <h2>Starter Code Map</h2>
+        <div class="card">
+                <p>The starter is intentionally split into two zones: a small editable DUT and a larger locked harness. If you stay inside that boundary, your work is valid. If you start changing the harness, you are changing the benchmark instead of solving it.</p>
+                <div class="touch-grid">
+                        <div class="touch-box editable">
+                                <h3>Editable Core</h3>
+                                <p><code>fp8_adder.v</code> is the reference implementation. It is correct, stable, and slow on purpose. Replace the state machine, shorten the latency, pipeline it, or fully redesign it. <code>challenge_pll.v</code> lets you tune the DUT/test clock as well.</p>
+                        </div>
+                        <div class="touch-box locked">
+                                <h3>Locked Harness</h3>
+                                <p><code>fp8_top.v</code> owns the board UI and the fixed measurement path. <code>test_controller.v</code> owns the handshake and golden checks. The ROM files and wrappers define the official test set.</p>
+                        </div>
+                </div>
+        </div>
+
+    <!-- ─── File Structure ─── -->
+    <h2>Project Files</h2>
+    <div class="card">
+        <div class="file-tree">
+challenges/fp8-adder/
+├── fpga/
+│   ├── fp8_adder.qpf              <span class="readonly">(Quartus project)</span>
+│   ├── fp8_adder.qsf              <span class="readonly">(pin assignments, DO NOT MODIFY)</span>
+│   ├── src/
+│   │   ├── <span class="editable">fp8_adder.v</span>            <span class="editable">← EDIT THIS FILE</span>
+│   │   ├── <span class="editable">challenge_pll.v</span>        <span class="editable">← PLL IS ALSO EDITABLE</span>
+│   │   ├── fp8_top.v              <span class="readonly">(top-level, DO NOT MODIFY)</span>
+│   │   ├── test_controller.v      <span class="readonly">(harness, DO NOT MODIFY)</span>
+│   │   ├── rom_8x4096.v           <span class="readonly">(memory, DO NOT MODIFY)</span>
+│   │   └── seg7_hex.v             <span class="readonly">(display, DO NOT MODIFY)</span>
+│   ├── sim/
+│   │   ├── fp8_adder_tb.v         <span class="readonly">(self-checking testbench)</span>
+│   │   └── run_fp8_adder_tb.do    <span class="readonly">(ModelSim batch runner)</span>
+│   └── mem/
+│       ├── mem_a.hex               <span class="readonly">(operand A vectors)</span>
+│       ├── mem_b.hex               <span class="readonly">(operand B vectors)</span>
+│       └── mem_expected.hex        <span class="readonly">(expected results)</span>
+└── python/
+    └── generate_vectors.py         <span class="readonly">(reference model, for understanding only)</span>
+        </div>
+    </div>
+
+    <!-- ─── Getting Started ─── -->
+    <h2>Getting Started</h2>
+    <div class="card">
+        <ol class="steps">
+            <li>Open <code>challenges/fp8-adder/fpga/</code> in Quartus Prime Lite 17.1</li>
+            <li>Run the provided simulation and make sure the starter passes all 4096 vectors before you touch anything</li>
+            <li>Compile and program the board, press <code>KEY[0]</code>, and record the starter runtime shown on HEX5..HEX0</li>
+            <li>Open <code>src/fp8_adder.v</code> and <code>src/challenge_pll.v</code> to optimize both the architecture and the DUT/test clock</li>
+            <li>After each change, rerun simulation first, then recompile and check the board runtime</li>
+            <li>Your first milestone is simple: keep <code>LEDR[0] = 1</code> and cut the runtime to half of the starter</li>
+            <li>After that, keep iterating for the fastest correct board result you can get</li>
+        </ol>
+    </div>
+
+    <!-- ─── Optimization Hints ─── -->
+    <h2>Hints</h2>
+    <div class="card">
+        <h3>What Actually Matters</h3>
+        <p style="margin-bottom: 1rem;">Now both latency and frequency matter. The stopwatch is fixed, but the DUT/test path is not, so the winning design is the one that turns real elapsed time into the smallest number on the board.</p>
+        <h3>Ideas</h3>
+        <ul style="padding-left: 1.5rem; color: var(--text-muted);">
+            <li>The controller waits for <code>done</code> before starting the next test, so per-operation latency matters directly.</li>
+            <li>Higher DUT frequency helps only if your logic still meets timing. Treat the PLL and the architecture as one system.</li>
+            <li>If you pipeline, make sure the handshake still behaves exactly as the harness expects.</li>
+            <li>Keep the Python model nearby when you touch rounding, denormals, NaNs, signed zero, or overflow saturation.</li>
+            <li>Use the simulation testbench aggressively. It is much cheaper than finding out on the board that you broke one corner case.</li>
+            <li>Do not waste time editing the fixed measurement path. It is locked, and it is already measuring the thing the judges care about.</li>
+        </ul>
+    </div>
+
+    <footer>
+        Hackathon VLSI-2026 - ECE Faculty, Technion
+    </footer>
+
+</div>
+</body>
+</html>

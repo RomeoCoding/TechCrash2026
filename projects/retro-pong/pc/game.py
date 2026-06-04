@@ -199,7 +199,7 @@ class GameState:
         self.narrow          = False  # SW[1]
         self.multi_ball      = False  # SW[0]
         self.multi_spawned   = False
-        self.multi_spawn_t   = 0.0   # time until second ball spawns
+        self.multi_spawn_t   = 2.0   # time until second ball spawns
 
         # Key edge detection (previous frame state)
         self.prev_key0 = False

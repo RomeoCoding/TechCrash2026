@@ -59,8 +59,13 @@ module pong_top (
     logic [8:0] uart_cnt;     // bit-period counter
     logic [3:0] uart_bit;     // 0-9 (8 data + 1 stop)
 
+    // Power-on reset — active-low for 1 clock cycle after bitstream load.
+    // Frees KEY[1] entirely for gameplay (shrink move).
+    logic por_n = 1'b0;
+    always_ff @(posedge MAX10_CLK1_50) por_n <= 1'b1;
+
     always_ff @(posedge MAX10_CLK1_50) begin
-        if (!KEY[1]) begin
+        if (!por_n) begin
             uart_active  <= 1'b0;
             uart_tx_line <= 1'b1;
             uart_done    <= 1'b0;
@@ -119,7 +124,7 @@ module pong_top (
     logic [5:0] spi_clk_cnt;
 
     always_ff @(posedge MAX10_CLK1_50) begin
-        if (!KEY[1]) begin
+        if (!por_n) begin
             spi_active   <= 1'b0;
             spi_done     <= 1'b0;
             GSENSOR_SCLK <= 1'b1;
@@ -190,7 +195,7 @@ module pong_top (
     wire [7:0] key_byte = {6'b0, ~KEY[1], ~KEY[0]};
 
     always_ff @(posedge MAX10_CLK1_50) begin
-        if (!KEY[1]) begin
+        if (!por_n) begin
             state        <= S_INIT_WAIT;
             main_cnt     <= 27'd0;
             spi_start    <= 1'b0;
