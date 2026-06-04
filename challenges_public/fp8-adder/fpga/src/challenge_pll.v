@@ -24,12 +24,12 @@ module challenge_pll (
     output wire locked
 );
 
-    // 50 MHz x 41 / 10 = 205 MHz DUT clock.
-    // 212.5 MHz failed slow 1200mV 85C setup by 0.161 ns; 205 MHz is the
-    // next conservative tuning point above the known-good 200 MHz build.
-    // Speedup: 4096 x 6 / 205 MHz = 119.9 us vs reference 2621 us -> 21.9x
-    localparam integer CLK0_MULTIPLY_BY = 41;
-    localparam integer CLK0_DIVIDE_BY   = 10;
+    // 50 MHz x 21 / 5 = 210 MHz DUT clock.
+    // 212.5 MHz failed slow 1200mV 85C setup by 0.161 ns; this 210 MHz build
+    // closes timing with 0.053 ns slow-corner setup margin.
+    // Speedup: 4096 x 6 / 210 MHz = 117.0 us vs reference 2621 us -> 22.4x
+    localparam integer CLK0_MULTIPLY_BY = 21;
+    localparam integer CLK0_DIVIDE_BY   = 5;
 
     wire [5:0] pll_clk_bus;
     wire [1:0] inclk_bus;

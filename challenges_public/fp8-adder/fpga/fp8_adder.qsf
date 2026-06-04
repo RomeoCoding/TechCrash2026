@@ -8,14 +8,25 @@ set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
 set_global_assignment -name INTERNAL_FLASH_UPDATE_MODE "SINGLE IMAGE WITH ERAM"
-set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_global_assignment -name FITTER_EFFORT "AUTO FIT"
 set_global_assignment -name SEED 3
+
+# Aggressive performance optimization
+set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
+set_global_assignment -name ROUTER_EFFORT_MULTIPLIER 2.0
+set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
+set_global_assignment -name TIMING_ANALYZER_MULTICORNER_ANALYSIS ON
+set_global_assignment -name SMART_RECOMPILE OFF
 
 # Source files
 set_global_assignment -name VERILOG_FILE src/fp8_top.v
 set_global_assignment -name VERILOG_FILE src/challenge_pll.v
 set_global_assignment -name VERILOG_FILE src/fp8_adder.v
 set_global_assignment -name VERILOG_FILE src/fp8_lut.v
+set_global_assignment -name VERILOG_FILE src/fp8_uart_tx.v
 set_global_assignment -name VERILOG_FILE src/test_controller.v
 set_global_assignment -name VERILOG_FILE src/seg7_hex.v
 set_global_assignment -name VERILOG_FILE src/rom_8x4096.v
@@ -102,6 +113,28 @@ set_location_assignment PIN_N18 -to HEX5[3]
 set_location_assignment PIN_M20 -to HEX5[4]
 set_location_assignment PIN_N19 -to HEX5[5]
 set_location_assignment PIN_N20 -to HEX5[6]
+
+# Arduino header HIL telemetry (3.3-V LVTTL)
+# ARDUINO_IO[0] reserved for ESP32 UART TX -> FPGA RX (unused/high-Z here)
+# ARDUINO_IO[1] FPGA UART TX -> ESP32 RX, 9600 8N1 official elapsed telemetry
+# ARDUINO_IO[2] done, ARDUINO_IO[3] busy, ARDUINO_IO[4] error_flag
+set_location_assignment PIN_AB5  -to ARDUINO_IO[0]
+set_location_assignment PIN_AB6  -to ARDUINO_IO[1]
+set_location_assignment PIN_AB7  -to ARDUINO_IO[2]
+set_location_assignment PIN_AB8  -to ARDUINO_IO[3]
+set_location_assignment PIN_AB9  -to ARDUINO_IO[4]
+set_location_assignment PIN_Y10  -to ARDUINO_IO[5]
+set_location_assignment PIN_AA11 -to ARDUINO_IO[6]
+set_location_assignment PIN_AA12 -to ARDUINO_IO[7]
+set_location_assignment PIN_AB17 -to ARDUINO_IO[8]
+set_location_assignment PIN_AA17 -to ARDUINO_IO[9]
+set_location_assignment PIN_AB19 -to ARDUINO_IO[10]
+set_location_assignment PIN_AA19 -to ARDUINO_IO[11]
+set_location_assignment PIN_Y19  -to ARDUINO_IO[12]
+set_location_assignment PIN_AB20 -to ARDUINO_IO[13]
+set_location_assignment PIN_AB21 -to ARDUINO_IO[14]
+set_location_assignment PIN_AA20 -to ARDUINO_IO[15]
+set_location_assignment PIN_F16  -to ARDUINO_RESET_N
 
 # IO standard
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVTTL"

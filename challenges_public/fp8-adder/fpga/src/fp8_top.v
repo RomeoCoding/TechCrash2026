@@ -7,6 +7,7 @@
 // Controls:
 //   KEY[0] = Start test (active low, directly used — no debounce needed)
 //   KEY[1] = Reset (active low)
+//   SW[0]  = Enable ESP32 start pulse input on ARDUINO_IO[5]
 //
 // Display:
 //   Running: HEX5-4 = "EE", LEDs[9:1] = progress bar
@@ -27,7 +28,9 @@ module fp8_top (
     input  wire [1:0]  KEY,
     input  wire [9:0]  SW,
     output wire [9:0]  LEDR,
-    output wire [6:0]  HEX0, HEX1, HEX2, HEX3, HEX4, HEX5
+    output wire [6:0]  HEX0, HEX1, HEX2, HEX3, HEX4, HEX5,
+    inout  wire [15:0] ARDUINO_IO,
+    inout  wire        ARDUINO_RESET_N
 );
 
     // ─── Clock and Reset ───
@@ -54,17 +57,26 @@ module fp8_top (
 
     // ─── Start edge detection ───
     reg key0_r, key0_rr;
+    reg hil_start_meta, hil_start_r, hil_start_rr;
     wire start_pulse;
     always @(posedge dut_clk or negedge dut_rst_n) begin
         if (!dut_rst_n) begin
             key0_r  <= 1'b1;
             key0_rr <= 1'b1;
+            hil_start_meta <= 1'b0;
+            hil_start_r    <= 1'b0;
+            hil_start_rr   <= 1'b0;
         end else begin
             key0_r  <= KEY[0];
             key0_rr <= key0_r;
+            hil_start_meta <= ARDUINO_IO[5];
+            hil_start_r    <= hil_start_meta;
+            hil_start_rr   <= hil_start_r;
         end
     end
-    assign start_pulse = key0_rr & ~key0_r;  // Falling edge of KEY[0]
+    wire key_start_pulse = key0_rr & ~key0_r;  // Falling edge of KEY[0]
+    wire hil_start_pulse = SW[0] & hil_start_r & ~hil_start_rr;
+    assign start_pulse = key_start_pulse | hil_start_pulse;
 
     // ─── Memory (ROM) instances ───
     wire [11:0] mem_addr;
@@ -256,5 +268,37 @@ module fp8_top (
         end
     end
     assign LEDR = led_out;
+
+    // HIL telemetry on the DE10-Lite Arduino header.
+    // IO[1] is FPGA UART TX at 9600 8N1: "US,000123,OK\n" or "US,000123,FAIL\n".
+    // IO[2:4] are static logic-level status pins for ESP32 interrupt capture.
+    wire hil_done       = finished_sync;
+    wire hil_busy       = running_sync;
+    wire hil_error_flag = finished_sync && (fail_count != 12'd0);
+    wire hil_uart_tx;
+
+    fp8_telemetry_tx hil_tx (
+        .clk        (meas_clk),
+        .rst_n      (meas_rst_n),
+        .finished   (finished_sync),
+        .fail_count (fail_count),
+        .us_d5      (us_d5),
+        .us_d4      (us_d4),
+        .us_d3      (us_d3),
+        .us_d2      (us_d2),
+        .us_d1      (us_d1),
+        .us_d0      (us_d0),
+        .tx         (hil_uart_tx),
+        .active     ()
+    );
+
+    assign ARDUINO_IO[0]    = 1'bz;
+    assign ARDUINO_IO[1]    = hil_uart_tx;
+    assign ARDUINO_IO[2]    = hil_done;
+    assign ARDUINO_IO[3]    = hil_busy;
+    assign ARDUINO_IO[4]    = hil_error_flag;
+    assign ARDUINO_IO[5]    = 1'bz;
+    assign ARDUINO_IO[15:6] = 10'bzzzzzzzzzz;
+    assign ARDUINO_RESET_N  = 1'bz;
 
 endmodule
