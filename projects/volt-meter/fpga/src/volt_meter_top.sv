@@ -19,7 +19,11 @@ module volt_meter_top (
     localparam BIT_CLK = CLK_HZ / BAUD;  // 5208
     localparam HALF    = BIT_CLK / 2;    // 2604
 
-    wire uart_rx = ARDUINO_IO[0];
+    logic uart_rx_meta, uart_rx;
+    always_ff @(posedge MAX10_CLK1_50) begin
+        uart_rx_meta <= ARDUINO_IO[0];
+        uart_rx      <= uart_rx_meta;
+    end
 
     typedef enum logic [1:0] { RX_IDLE, RX_START, RX_DATA, RX_STOP } rx_state_t;
     rx_state_t   rx_state;

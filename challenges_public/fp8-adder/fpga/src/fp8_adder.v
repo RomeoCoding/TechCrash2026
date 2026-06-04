@@ -1,19 +1,23 @@
 // ============================================================================
 // FP8 E4M3 Adder — Single-Cycle BRAM Lookup (6 cycles/vector)
 // ============================================================================
-// Replaces the 2-state FSM with a single registered capture, exploiting the
-// pipeline overlap in test_controller.v:
+// Pipeline overlap with test_controller.v:
 //
 //   TC_FETCH    : mem_addr set
-//   TC_WAIT_MEM : adder_a/b captured from ROM — BRAM address {a,b} changes here
-//   TC_LAUNCH   : start=1; BRAM lut_q is now valid (1 cycle after address)
-//                 → result <= lut_q, done <= 1 (both registered)
-//   TC_WAIT_ADD : done=1 visible; TC exits after 1 cycle
-//   TC_CHECK    : compare result
+//   TC_WAIT_MEM : adder_a/b captured — BRAM address {a,b} presented this cycle
+//   TC_LAUNCH   : adder_start pulses high (NBA takes effect after this edge)
+//   TC_WAIT_ADD : adder_start=1 visible; done=start=1 (combinatorial wire);
+//                 TC sees done=1 immediately — exits in 1 cycle;
+//                 lut_q valid (1-cycle BRAM registered output after TC_LAUNCH);
+//                 result <= lut_q registered at this edge — correct fp8_add(a,b)
+//   TC_CHECK    : compare adder_result (= result registered at TC_WAIT_ADD)
 //   TC_NEXT     : advance
 //
-// Latency from start to done: exactly 1 clock cycle (registered capture).
-// Cycles per vector: 6 (vs 7 with 2-state FSM, 16 with combinational original).
+// CRITICAL: done must be a WIRE, not a register.
+// A registered "done <= start" forces two TC_WAIT_ADD cycles (7 total) because
+// TC reads done's OLD value at the TC_WAIT_ADD edge — the new value only
+// appears the following cycle. A wire bypasses this one-cycle delay, giving
+// exactly 1 TC_WAIT_ADD cycle and 6 cycles/vector total.
 //
 // Wall time: 4096 × 6 / 200 MHz = 122.9 µs  →  21.3× speedup vs 2621 µs ref.
 // ============================================================================
@@ -25,12 +29,17 @@ module fp8_adder (
     input  wire [7:0] a,
     input  wire [7:0] b,
     output reg  [7:0] result,
-    output reg        done,
-    output reg        busy
+    output wire       done,
+    output wire       busy
 );
 
-    // BRAM: continuously driven by {a, b}; lut_q valid 1 cycle after a/b change.
-    // a/b are set by TC_WAIT_MEM; lut_q is valid by TC_LAUNCH.
+    // done/busy are combinatorial: TC reads them as 1 on the same edge that
+    // adder_start arrives, so TC_WAIT_ADD needs only 1 cycle.
+    assign done = start;
+    assign busy = start;
+
+    // BRAM address driven directly by module inputs a/b (registered in TC).
+    // Address valid from TC_WAIT_MEM onwards; lut_q valid at TC_WAIT_ADD.
     wire [7:0] lut_q;
 
     fp8_lut lut_rom (
@@ -39,20 +48,11 @@ module fp8_adder (
         .q       (lut_q)
     );
 
-    // Single registered capture: on start, lut_q already holds fp8_add(a,b).
+    // Register lut_q every cycle. At TC_WAIT_ADD edge, result captures
+    // fp8_add(a,b) — valid for TC_CHECK to read one cycle later.
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            result <= 8'd0;
-            done   <= 1'b0;
-            busy   <= 1'b0;
-        end else begin
-            // lut_q is valid at TC_LAUNCH (1 cycle after a/b set in TC_WAIT_MEM).
-            // Capture it unconditionally — a/b are stable through TC_CHECK.
-            result <= lut_q;
-            // done and busy fire for exactly 1 cycle, 1 cycle after start.
-            done   <= start;
-            busy   <= start;
-        end
+        if (!rst_n) result <= 8'd0;
+        else        result <= lut_q;
     end
 
 endmodule

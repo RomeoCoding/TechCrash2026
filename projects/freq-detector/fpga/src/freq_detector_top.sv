@@ -113,21 +113,24 @@ module freq_detector_top (
     logic [7:0]  zc_latch;      // ZC count captured at end of frame
     logic [13:0] freq_display;  // latched frequency in Hz
 
+    // Combinational: ZC count including the current byte's contribution.
+    // Using a wire avoids conflicting non-blocking assignments when byte_count==255
+    // (last ZC of a frame would otherwise be overridden by the zc_accum<=8'd0 reset).
+    wire [7:0] zc_next = (rx_byte[7] != last_sign) ? zc_accum + 8'd1 : zc_accum;
+
     always_ff @(posedge MAX10_CLK1_50) begin
         if (rx_valid) begin
-            // Count sign-bit transitions (zero crossings)
-            if (rx_byte[7] != last_sign)
-                zc_accum <= zc_accum + 8'd1;
             last_sign <= rx_byte[7];
 
             if (byte_count == 8'd255) begin
-                // End of 256-sample frame — compute frequency
-                // freq = zc_accum * 8000 / 512 = zc_accum * 125 >> 3
-                zc_latch      <= zc_accum;
-                freq_display  <= (14'(zc_accum) * 14'd125) >> 3;
-                zc_accum      <= 8'd0;
-                byte_count    <= 8'd0;
+                // End of 256-sample frame — capture final ZC count, compute frequency
+                // freq = zc_next * 8000 / 512 = zc_next * 125 >> 3
+                zc_latch     <= zc_next;
+                freq_display <= (14'(zc_next) * 14'd125) >> 3;
+                zc_accum     <= 8'd0;
+                byte_count   <= 8'd0;
             end else begin
+                zc_accum   <= zc_next;
                 byte_count <= byte_count + 8'd1;
             end
         end
