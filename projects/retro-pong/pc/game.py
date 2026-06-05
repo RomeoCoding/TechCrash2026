@@ -66,6 +66,31 @@ YELLOW     = (255, 220, 50)
 # Ball speeds by SW[9:8]
 SPEED_TABLE = {0: 5, 1: 7, 2: 10, 3: 14}
 
+# Power-up orbs
+POWERUP_R         = 10
+POWERUP_SPAWN_MIN = 5.0
+POWERUP_SPAWN_MAX = 15.0
+
+# type → (label, core color, glow color)
+POWERUP_TYPES = {
+    'shot':  ('⚡', (255, 180,  0), (255, 230, 80)),   # orange — recharge power shot
+    'grow':  ('+',  ( 80, 220, 80), (150, 255, 150)),  # green  — bigger paddle 8 s
+    'chaos': ('∞',  (200,  80, 255), (220, 150, 255)), # purple — 4 extra balls, no lose
+}
+PADDLE_GROW_BONUS = 40   # px added to paddle height
+PADDLE_GROW_TIME  = 8.0  # seconds
+
+# ---------------------------------------------------------------------------
+# Tilt control tuning (P1 / FPGA accelerometer)
+# ---------------------------------------------------------------------------
+# TILT_RANGE: accel counts (relative to the calibrated rest point) that map to
+#   a full half-screen of paddle travel. Smaller = more sensitive (less tilt
+#   needed to reach the edges). ADXL345 ±2g: 1g ≈ 256 counts, so 130 ≈ ~30°.
+TILT_RANGE     = 130
+TILT_DEADZONE  = 8      # counts around rest that map to dead-centre (kills jitter)
+TILT_SMOOTH    = 0.5    # 0=instant (jittery), 1=frozen. 0.5 ≈ snappy but smooth
+TILT_CAL_SAMPLES = 30   # packets averaged at startup to find the rest point
+
 # ---------------------------------------------------------------------------
 # Procedural sounds (no audio files needed)
 # ---------------------------------------------------------------------------
@@ -201,6 +226,20 @@ class GameState:
         self.multi_spawned   = False
         self.multi_spawn_t   = 2.0   # time until second ball spawns
 
+        # Power-up orb
+        self.powerup_pos    = None   # (x, y) or None
+        self.powerup_type   = None   # 'shot' | 'grow' | 'chaos'
+        self.powerup_timer  = random.uniform(POWERUP_SPAWN_MIN, POWERUP_SPAWN_MAX)
+        self.powerup_pulse  = 0.0
+        self.last_toucher   = None
+
+        # Grow timers per player
+        self.grow_timer     = [0.0, 0.0]
+        self.base_h         = [PADDLE_H_NORMAL, PADDLE_H_NORMAL]  # tracks base without grow
+
+        # Chaos mode: extra balls that don't cause scoring
+        self.chaos_balls    = []   # list of Ball — disappear on exit, no score loss
+
         # Key edge detection (previous frame state)
         self.prev_key0 = False
         self.prev_key1 = False
@@ -244,10 +283,18 @@ class GameState:
         self.shrink_timer         = [0.0, 0.0]
         self.multi_spawned        = False
         self.multi_spawn_t        = 2.0
+        self.powerup_pos          = None
+        self.powerup_type         = None
+        self.powerup_timer        = random.uniform(POWERUP_SPAWN_MIN, POWERUP_SPAWN_MAX)
+        self.powerup_pulse        = 0.0
+        self.last_toucher         = None
+        self.grow_timer           = [0.0, 0.0]
+        self.chaos_balls          = []
         # Keep narrow/multi from switches
         for p in [P1, P2]:
             base_h = PADDLE_H_NARROW if self.narrow else PADDLE_H_NORMAL
             self.p_h[p] = base_h
+            self.base_h[p] = base_h
 
     def trigger_power_shot(self, player):
         if self.power_shot_available[player] and not self.power_shot_pending[player]:
@@ -277,11 +324,11 @@ class GameState:
                     self.p_h[p] = base_h
 
     def apply_narrow(self, narrow):
-        """Apply SW[1] narrow mode change."""
         self.narrow = narrow
         for p in [P1, P2]:
-            if not self.shrink_active[p]:
-                self.p_h[p] = PADDLE_H_NARROW if narrow else PADDLE_H_NORMAL
+            self.base_h[p] = PADDLE_H_NARROW if narrow else PADDLE_H_NORMAL
+            if not self.shrink_active[p] and self.grow_timer[p] <= 0:
+                self.p_h[p] = self.base_h[p]
 
     def clamp_paddle(self, player):
         h  = self.p_h[player]
@@ -291,6 +338,7 @@ class GameState:
 
     def handle_paddle_hit(self, ball, player):
         """Reflect ball off paddle; apply power shot if pending."""
+        self.last_toucher = player
         ball.vx = -ball.vx
         # New vy based on where ball hit the paddle
         cy = self.p_y[player]
@@ -335,10 +383,70 @@ class GameState:
     def check_ball_score(self, ball):
         """Returns scoring player index or None."""
         if ball.x + ball.size < 0:
-            return P2   # P2 scores (ball left screen on P1 side)
+            return P2
         if ball.x > SCREEN_W:
-            return P1   # P1 scores
+            return P1
         return None
+
+    def update_grow_timers(self, dt):
+        for p in [P1, P2]:
+            if self.grow_timer[p] > 0:
+                self.grow_timer[p] -= dt
+                if self.grow_timer[p] <= 0:
+                    # revert to base (unless shrunk)
+                    if not self.shrink_active[p]:
+                        self.p_h[p] = self.base_h[p]
+
+    def update_powerup(self, dt):
+        self.powerup_pulse = (self.powerup_pulse + dt * 4) % (2 * math.pi)
+        if self.powerup_pos is None:
+            self.powerup_timer -= dt
+            if self.powerup_timer <= 0:
+                margin = 80
+                x = random.randint(P1_X + PADDLE_W + margin, P2_X - margin)
+                y = random.randint(60, SCREEN_H - 60)
+                self.powerup_pos = (x, y)
+                self.powerup_type = random.choice(list(POWERUP_TYPES.keys()))
+
+        # Tick chaos balls — bounce walls, paddle collisions, remove on exit
+        for cb in list(self.chaos_balls):
+            cb.update(dt)
+            cb.bounce_wall()
+            self.check_ball_paddle(cb)
+            # Remove chaos ball if it exits either side (no score)
+            if cb.x + cb.size < 0 or cb.x > SCREEN_W:
+                self.chaos_balls.remove(cb)
+
+    def check_powerup_collision(self, ball):
+        """Returns powerup type string if ball hits orb, else None."""
+        if self.powerup_pos is None:
+            return None
+        px, py = self.powerup_pos
+        bx = ball.x + ball.size / 2
+        by = ball.y + ball.size / 2
+        if math.hypot(bx - px, by - py) < POWERUP_R + ball.size / 2:
+            ptype = self.powerup_type
+            self.powerup_pos  = None
+            self.powerup_type = None
+            self.powerup_timer = random.uniform(POWERUP_SPAWN_MIN, POWERUP_SPAWN_MAX)
+            return ptype
+        return None
+
+    def apply_powerup(self, ptype, speed):
+        beneficiary = self.last_toucher if self.last_toucher is not None else P1
+        if ptype == 'shot':
+            self.power_shot_available[beneficiary] = True
+        elif ptype == 'grow':
+            self.grow_timer[beneficiary] = PADDLE_GROW_TIME
+            if not self.shrink_active[beneficiary]:
+                self.p_h[beneficiary] = min(self.base_h[beneficiary] + PADDLE_GROW_BONUS,
+                                            SCREEN_H // 2)
+        elif ptype == 'chaos':
+            for _ in range(12):
+                b = Ball(speed)
+                b.x = float(random.randint(100, SCREEN_W - 100))
+                b.y = float(random.randint(60, SCREEN_H - 60))
+                self.chaos_balls.append(b)
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +490,36 @@ def draw_modifiers(surf, font_small, gs, speed_idx):
     txt = "  ".join(labels)
     t = font_small.render(txt, True, GREY_MID)
     surf.blit(t, (8, SCREEN_H - 18))
+
+    # P1 controls (left side)
+    p1_shot  = "SHOT:RDY" if gs.power_shot_available[P1] else ("SHOT:ARM" if gs.power_shot_pending[P1] else "SHOT:--")
+    p1_shrink = "SHRINK:RDY" if gs.shrink_available[P1] else "SHRINK:--"
+    p1_col_shot   = CYAN if gs.power_shot_pending[P1] else (WHITE if gs.power_shot_available[P1] else GREY_MID)
+    p1_col_shrink = YELLOW if gs.shrink_available[P1] else GREY_MID
+    surf.blit(font_small.render(f"KEY0:{p1_shot}", True, p1_col_shot),   (8, SCREEN_H - 36))
+    surf.blit(font_small.render(f"KEY1:{p1_shrink}", True, p1_col_shrink), (8, SCREEN_H - 50))
+
+    # P2 controls (right side)
+    p2_shot   = "SHOT:RDY" if gs.power_shot_available[P2] else ("SHOT:ARM" if gs.power_shot_pending[P2] else "SHOT:--")
+    p2_shrink = "SHRINK:RDY" if gs.shrink_available[P2] else "SHRINK:--"
+    p2_col_shot   = CYAN if gs.power_shot_pending[P2] else (WHITE if gs.power_shot_available[P2] else GREY_MID)
+    p2_col_shrink = YELLOW if gs.shrink_available[P2] else GREY_MID
+    surf.blit(font_small.render(f"SPC:{p2_shot}", True, p2_col_shot),    (SCREEN_W - 120, SCREEN_H - 36))
+    surf.blit(font_small.render(f"ENT:{p2_shrink}", True, p2_col_shrink), (SCREEN_W - 120, SCREEN_H - 50))
+
+def draw_powerup(surf, gs, font_small):
+    if gs.powerup_pos is None or gs.powerup_type is None:
+        return
+    px, py = gs.powerup_pos
+    label, core_col, glow_col = POWERUP_TYPES[gs.powerup_type]
+    glow_r = int(POWERUP_R + 4 + 3 * math.sin(gs.powerup_pulse))
+    glow_surf = pygame.Surface((glow_r * 2 + 2, glow_r * 2 + 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surf, (*glow_col, 80), (glow_r + 1, glow_r + 1), glow_r)
+    surf.blit(glow_surf, (px - glow_r - 1, py - glow_r - 1))
+    pygame.draw.circle(surf, core_col, (px, py), POWERUP_R)
+    pygame.draw.circle(surf, WHITE, (px, py), POWERUP_R, 2)
+    t = font_small.render(label, True, WHITE)
+    surf.blit(t, (px - t.get_width() // 2, py - t.get_height() // 2))
 
 def draw_flash(surf, side, alpha):
     flash = pygame.Surface((SCREEN_W // 2, SCREEN_H), pygame.SRCALPHA)
@@ -461,6 +599,13 @@ def main():
     ball_speed  = SPEED_TABLE[speed_idx]
     gs          = GameState(ball_speed)
 
+    # Tilt calibration: average the first N packets to learn the board's
+    # resting ay reading, then map tilt relative to that. Avoids the paddle
+    # sitting pinned at an edge due to mounting angle / chip offset.
+    tilt_zero    = 0.0
+    cal_samples  = []
+    calibrated   = False
+
     running = True
 
     while running:
@@ -487,6 +632,7 @@ def main():
                 if gs.serving or gs.pause_timer > 0 or gs.winner is not None:
                     if event.key not in (pygame.K_ESCAPE,):
                         if gs.winner is not None and gs.win_timer <= 0:
+                            speed_idx = 1  # reset to NORMAL on new game
                             gs = GameState(SPEED_TABLE[speed_idx])
                         elif gs.serving:
                             gs.serving = False
@@ -497,11 +643,27 @@ def main():
         pkt = read_fpga_packet(ser1)
         if pkt:
             data = parse_packet(pkt)
-            ay         = data['ay']
-            ay_clamped = max(-180, min(180, ay))
-            # Map [-180,+180] → paddle centre y in [PADDLE_H/2, SCREEN_H-PADDLE_H/2]
-            half_h = gs.p_h[P1] / 2
-            gs.p_y[P1] = (ay_clamped + 180) / 360.0 * (SCREEN_H - gs.p_h[P1]) + half_h
+            ay = data['ay']
+
+            if not calibrated:
+                # Collect rest-point samples; hold paddle centred meanwhile.
+                cal_samples.append(ay)
+                gs.p_y[P1] = SCREEN_H / 2
+                if len(cal_samples) >= TILT_CAL_SAMPLES:
+                    tilt_zero  = sum(cal_samples) / len(cal_samples)
+                    calibrated = True
+                    print(f"[tilt] calibrated rest ay = {tilt_zero:.0f}")
+            else:
+                # Tilt relative to the calibrated rest point.
+                rel = ay - tilt_zero
+                if abs(rel) < TILT_DEADZONE:
+                    rel = 0.0
+                # Normalise to [-1, +1] over TILT_RANGE, then to screen.
+                norm   = max(-1.0, min(1.0, rel / TILT_RANGE))
+                half_h = gs.p_h[P1] / 2
+                target_y = (norm + 1.0) / 2.0 * (SCREEN_H - gs.p_h[P1]) + half_h
+                # Light exponential smoothing — responsive but not jittery.
+                gs.p_y[P1] = gs.p_y[P1] * TILT_SMOOTH + target_y * (1.0 - TILT_SMOOTH)
 
             # KEY rising edges
             k0 = data['key0']
@@ -515,10 +677,17 @@ def main():
             gs.prev_key0 = k0
             gs.prev_key1 = k1
 
-            # SW modifiers (take effect at next serve for speed; immediate for narrow/multi)
+            # SW modifiers — speed applies immediately at next point reset
             new_speed_idx = data['speed_idx']
             if new_speed_idx != speed_idx:
-                speed_idx = new_speed_idx  # applied at next reset_point
+                speed_idx = new_speed_idx
+                new_speed = SPEED_TABLE[speed_idx]
+                for b in gs.balls + gs.chaos_balls:
+                    if b.speed > 0:
+                        scale = new_speed / b.speed
+                        b.vx *= scale
+                        b.vy *= scale
+                        b.speed = new_speed
 
             new_narrow = data['narrow']
             if new_narrow != gs.narrow:
@@ -542,9 +711,12 @@ def main():
         gs.clamp_paddle(P2)
 
         # ----------------------------------------------------------------
-        # 4. Shrink timers
+        # 4. Shrink / grow timers + power-up tick
         # ----------------------------------------------------------------
         gs.update_shrink_timers(dt)
+        gs.update_grow_timers(dt)
+        if not gs.serving and gs.pause_timer <= 0 and gs.winner is None:
+            gs.update_powerup(dt)
 
         # ----------------------------------------------------------------
         # 5. Flash / pause / win timers
@@ -584,24 +756,37 @@ def main():
                 if hit:
                     SND_PADDLE.play()
 
+                # Power-up collision
+                ptype = gs.check_powerup_collision(ball)
+                if ptype:
+                    gs.apply_powerup(ptype, SPEED_TABLE[speed_idx])
+                    SND_POWER.play()
+
                 # Score check
                 scorer = gs.check_ball_score(ball)
                 if scorer is not None:
-                    gs.scores[scorer] += 1
-                    SND_POINT.play()
-                    send_score(ser1, ser2, gs.scores[P1], gs.scores[P2])
-
-                    gs.flash_side  = scorer
-                    gs.flash_timer = 0.12
-
-                    if gs.scores[scorer] >= MAX_SCORE:
-                        gs.winner   = scorer
-                        gs.win_timer = 3.0
-                        SND_WIN.play()
+                    if gs.chaos_balls:
+                        # Chaos mode: losing a real ball just removes it, no score
+                        gs.balls.remove(ball)
+                        if not gs.balls:
+                            # All real balls gone — spawn a fresh one, chaos ends
+                            gs.chaos_balls.clear()
+                            gs.balls = [Ball(SPEED_TABLE[speed_idx])]
+                            gs.pause_timer = 0.8
                     else:
-                        gs.reset_point(SPEED_TABLE[speed_idx])
-                        gs.pause_timer = 1.0
-
+                        gs.scores[scorer] += 1
+                        SND_POINT.play()
+                        send_score(ser1, ser2, gs.scores[P1], gs.scores[P2])
+                        gs.flash_side  = scorer
+                        gs.flash_timer = 0.12
+                        if gs.scores[scorer] >= MAX_SCORE:
+                            gs.winner    = scorer
+                            gs.win_timer = 3.0
+                            SND_WIN.play()
+                        else:
+                            speed_idx = 1  # reset to NORMAL each round
+                            gs.reset_point(SPEED_TABLE[speed_idx])
+                            gs.pause_timer = 1.0
                     break  # only one score event per frame
 
         # ----------------------------------------------------------------
@@ -613,6 +798,9 @@ def main():
         draw_paddle(screen, gs, P2)
         for ball in gs.balls:
             draw_ball(screen, ball)
+        for cb in gs.chaos_balls:
+            pygame.draw.rect(screen, (200, 80, 255), cb.rect())
+        draw_powerup(screen, gs, font_small)
         draw_scores(screen, font_large, gs)
         draw_title(screen, font_med)
         draw_modifiers(screen, font_small, gs, speed_idx)
