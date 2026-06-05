@@ -125,8 +125,9 @@ module freq_detector_top (
             if (byte_count == 8'd255) begin
                 // End of 256-sample frame — capture final ZC count, compute frequency
                 // freq = zc_next * 8000 / 512 = zc_next * 125 >> 3
+                // Add 4 before >> 3 to round instead of truncate
                 zc_latch     <= zc_next;
-                freq_display <= (14'(zc_next) * 14'd125) >> 3;
+                freq_display <= ((14'(zc_next) * 14'd125) + 14'd4) >> 3;
                 zc_accum     <= 8'd0;
                 byte_count   <= 8'd0;
             end else begin
@@ -139,17 +140,16 @@ module freq_detector_top (
     // =========================================================================
     // BCD decomposition for display
     // =========================================================================
-    logic [13:0] disp_val;
-    logic [3:0]  d3, d2, d1, d0;
-
-    // SW[9]=1: show raw zero-crossing count (debug); SW[9]=0: show freq Hz
-    assign disp_val = SW[9] ? {6'b0, zc_latch} : freq_display;
+    logic [3:0] d3, d2, d1, d0;
+    logic [3:0] z1, z0;   // zc_latch tens and units for debug HEX5/4
 
     always_comb begin
-        d3 = 4'(disp_val / 14'd1000);
-        d2 = 4'((disp_val % 14'd1000) / 14'd100);
-        d1 = 4'((disp_val % 14'd100)  / 14'd10);
-        d0 = 4'(disp_val % 14'd10);
+        d3 = 4'(freq_display / 14'd1000);
+        d2 = 4'((freq_display % 14'd1000) / 14'd100);
+        d1 = 4'((freq_display % 14'd100)  / 14'd10);
+        d0 = 4'(freq_display % 14'd10);
+        z1 = 4'(zc_latch / 8'd10);
+        z0 = 4'(zc_latch % 8'd10);
     end
 
     // =========================================================================
@@ -172,21 +172,84 @@ module freq_detector_top (
         endcase
     endfunction
 
+    // HEX3..0 always show frequency Hz
     assign HEX3 = seg7(d3);
     assign HEX2 = seg7(d2);
     assign HEX1 = seg7(d1);
     assign HEX0 = seg7(d0);
-    assign HEX4 = 8'hFF;
-    assign HEX5 = 8'hFF;
+    // SW[9]=1: HEX5/4 show raw ZC count (debug internals); SW[9]=0: blank
+    assign HEX5 = SW[9] ? seg7(z1)  : 8'hFF;
+    assign HEX4 = SW[9] ? seg7(z0)  : 8'hFF;
 
     // =========================================================================
-    // LED thermometer bar — thresholds at 290, 480, 670, ..., 2000 Hz
+    // LED animated bar — thermometer fill + top LED blinks at freq-band rate
+    //
+    // Frequency bands (190 Hz each, 10 bands from 100 to 2000 Hz):
+    //   band 0: 100-289 Hz  → 1 LED
+    //   band 1: 290-479 Hz  → 2 LEDs
+    //   ...
+    //   band 9: 1910-2000Hz → 10 LEDs
+    //
+    // The highest lit LED blinks at a rate derived from the band index so that
+    // higher frequencies produce a visibly faster pulse (creative requirement).
+    // Blink dividers: band0=25M clocks (~2Hz), band9=2.5M clocks (~20Hz).
     // =========================================================================
-    genvar i;
-    generate
-        for (i = 0; i < 10; i++) begin : led_gen
-            assign LEDR[i] = (freq_display >= 14'(100 + (i + 1) * 190)) ? 1'b1 : 1'b0;
+    logic [3:0] led_count;   // number of LEDs that should be on (1..10, 0=none)
+
+    always_comb begin
+        casez (1'b1)
+            (freq_display >= 14'd1810): led_count = 4'd10;
+            (freq_display >= 14'd1620): led_count = 4'd9;
+            (freq_display >= 14'd1430): led_count = 4'd8;
+            (freq_display >= 14'd1240): led_count = 4'd7;
+            (freq_display >= 14'd1050): led_count = 4'd6;
+            (freq_display >= 14'd860):  led_count = 4'd5;
+            (freq_display >= 14'd670):  led_count = 4'd4;
+            (freq_display >= 14'd480):  led_count = 4'd3;
+            (freq_display >= 14'd290):  led_count = 4'd2;
+            (freq_display >= 14'd100):  led_count = 4'd1;
+            default:                    led_count = 4'd0;
+        endcase
+    end
+
+    // Blink counter — 25 bits handles up to 25M clocks at 50 MHz = 0.5s period
+    logic [24:0] blink_cnt;
+    logic        blink_bit;
+
+    // Divide 50 MHz by a band-dependent amount:
+    // band 0 (slowest) → use bit[23] of counter (~3 Hz toggle = ~6 Hz blink)
+    // band 9 (fastest) → use bit[19] of counter (~48 Hz toggle = ~96 Hz blink)
+    // We pick bit index = 23 - led_count, clamped to [19..23]
+    always_ff @(posedge MAX10_CLK1_50)
+        blink_cnt <= blink_cnt + 25'd1;
+
+    always_comb begin
+        case (led_count)
+            4'd10:   blink_bit = blink_cnt[18];
+            4'd9:    blink_bit = blink_cnt[19];
+            4'd8:    blink_bit = blink_cnt[20];
+            4'd7:    blink_bit = blink_cnt[20];
+            4'd6:    blink_bit = blink_cnt[21];
+            4'd5:    blink_bit = blink_cnt[21];
+            4'd4:    blink_bit = blink_cnt[22];
+            4'd3:    blink_bit = blink_cnt[22];
+            4'd2:    blink_bit = blink_cnt[23];
+            4'd1:    blink_bit = blink_cnt[23];
+            default: blink_bit = 1'b0;
+        endcase
+    end
+
+    // Build LED output: solid fill for LEDs below top, blink on top LED
+    always_comb begin
+        LEDR = 10'b0;
+        for (int j = 0; j < 10; j++) begin
+            if (led_count > 4'(j + 1))
+                LEDR[j] = 1'b1;              // solid on — below top
+            else if (led_count == 4'(j + 1))
+                LEDR[j] = blink_bit;         // top LED blinks at band rate
+            else
+                LEDR[j] = 1'b0;
         end
-    endgenerate
+    end
 
 endmodule

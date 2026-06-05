@@ -1,0 +1,69 @@
+# flappy_m1.qsf — Quartus Settings File
+# Neural Flappy Bird, Milestone 1 — DE10-Lite (MAX 10 10M50DAF484C7G)
+#
+# UART uses the GPIO_0 header (JP1):
+#   GPIO_0[0] = FPGA TX (PIN_V10)  -> ESP32 RX (GPIO16)
+# (Milestone 1 is TX-only: the FPGA sends flap + difficulty to the ESP32.)
+
+set_global_assignment -name FAMILY "MAX 10"
+set_global_assignment -name DEVICE 10M50DAF484C7G
+set_global_assignment -name TOP_LEVEL_ENTITY flappy_m1_top
+set_global_assignment -name LAST_QUARTUS_VERSION "17.1.0 Lite Edition"
+
+# ── Source Files ─────────────────────────────────────────────────────────────
+set_global_assignment -name VERILOG_FILE src/uart_tx.v
+set_global_assignment -name VERILOG_FILE src/flappy_m1_top.v
+
+# ── Clock ────────────────────────────────────────────────────────────────────
+set_location_assignment PIN_P11 -to MAX10_CLK1_50
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to MAX10_CLK1_50
+
+# ── Switches SW[9:0] ─────────────────────────────────────────────────────────
+set_location_assignment PIN_C10 -to SW[0]
+set_location_assignment PIN_C11 -to SW[1]
+set_location_assignment PIN_D12 -to SW[2]
+set_location_assignment PIN_C12 -to SW[3]
+set_location_assignment PIN_A12 -to SW[4]
+set_location_assignment PIN_B12 -to SW[5]
+set_location_assignment PIN_A13 -to SW[6]
+set_location_assignment PIN_A14 -to SW[7]
+set_location_assignment PIN_B14 -to SW[8]
+set_location_assignment PIN_F15 -to SW[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to SW[*]
+
+# ── Keys KEY[1:0] (active-low) ───────────────────────────────────────────────
+set_location_assignment PIN_B8 -to KEY[0]
+set_location_assignment PIN_A7 -to KEY[1]
+set_instance_assignment -name IO_STANDARD "3.3 V SCHMITT TRIGGER" -to KEY[*]
+
+# ── LEDs LEDR[9:0] ───────────────────────────────────────────────────────────
+set_location_assignment PIN_A8  -to LEDR[0]
+set_location_assignment PIN_A9  -to LEDR[1]
+set_location_assignment PIN_A10 -to LEDR[2]
+set_location_assignment PIN_B10 -to LEDR[3]
+set_location_assignment PIN_D13 -to LEDR[4]
+set_location_assignment PIN_C13 -to LEDR[5]
+set_location_assignment PIN_E14 -to LEDR[6]
+set_location_assignment PIN_D14 -to LEDR[7]
+set_location_assignment PIN_A11 -to LEDR[8]
+set_location_assignment PIN_B11 -to LEDR[9]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LEDR[*]
+
+# ── HEX0 (active-low segments, [7]=decimal point) ────────────────────────────
+set_location_assignment PIN_C14 -to HEX0[0]
+set_location_assignment PIN_E15 -to HEX0[1]
+set_location_assignment PIN_C15 -to HEX0[2]
+set_location_assignment PIN_C16 -to HEX0[3]
+set_location_assignment PIN_E16 -to HEX0[4]
+set_location_assignment PIN_D17 -to HEX0[5]
+set_location_assignment PIN_C17 -to HEX0[6]
+set_location_assignment PIN_D15 -to HEX0[7]
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to HEX0[*]
+
+# ── UART TX on GPIO_0[0] = PIN_V10 ───────────────────────────────────────────
+set_location_assignment PIN_V10 -to GPIO_0_TX
+set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to GPIO_0_TX
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files

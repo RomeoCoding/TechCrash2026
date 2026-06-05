@@ -122,8 +122,6 @@ void loop() {
                 updateDisplay(val, win);
                 if (win)
                     playVictory();
-                else
-                    playMiss();
             }
             rxLine = "";
         } else if (rxLine.length() < 8) {

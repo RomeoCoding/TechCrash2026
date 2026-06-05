@@ -1,0 +1,4 @@
+QUARTUS_VERSION = "17.1"
+
+# Revisions
+PROJECT_REVISION = "flappy_m1"
