@@ -9,7 +9,7 @@
 //
 // Protocol:
 //   1. TX phase  — CS_N low, stream all bytes (header + data) via MOSI at SCK_FREQ
-//   2. Auto-gap  — CS_N high for GAP_CYCLES after last byte (ESP32 finishes checksum)
+//   2. Auto-gap  — CS_N high until ready_for_rx or GAP_CYCLES timeout
 //   3. RX phase  — CS_N low, clock 8 dummy bits and read checksum byte from MISO
 //   4. rx_valid pulsed; module returns to IDLE
 //
@@ -19,7 +19,8 @@
 module spi_loopback_io #(
     parameter CLK_FREQ  = 50_000_000,
     parameter CLK_DIV   = 3,       // SCK half-period in clk cycles → 8.33 MHz
-    parameter GAP_CYCLES = 50000   // CS_N high gap: 50000 × 20ns = 1 ms (ESP32 compute time)
+    parameter GAP_CYCLES = 50000,  // fallback timeout if ready_for_rx is not wired
+    parameter MIN_GAP_CYCLES = 500 // minimum CS_N high time before honoring ready_for_rx
 )(
     input  wire       clk,
     input  wire       rst_n,
@@ -37,6 +38,7 @@ module spi_loopback_io #(
     output reg        sck,
     output reg        mosi,
     input  wire       miso,
+    input  wire       ready_for_rx,
     output reg        cs_n
 );
 
@@ -174,10 +176,12 @@ module spi_loopback_io #(
                 end
 
                 // ---------------------------------------------------------
-                // GAP: Hold CS_N=1 for GAP_CYCLES so ESP32 finishes summing.
+                // GAP: Hold CS_N=1 until ESP32 reports checksum transaction ready.
+                // GAP_CYCLES remains as a fallback timeout for old/disconnected wiring.
                 // ---------------------------------------------------------
                 S_GAP: begin
-                    if (gap_cnt == GAP_CYCLES[16:0] - 17'd1) begin
+                    if (((gap_cnt >= MIN_GAP_CYCLES[16:0]) && ready_for_rx) ||
+                        (gap_cnt == GAP_CYCLES[16:0] - 17'd1)) begin
                         // Begin checksum receive: assert CS_N, drive MOSI=0
                         cs_n    <= 1'b0;
                         mosi    <= 1'b0;
